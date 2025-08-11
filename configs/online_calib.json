@@ -1,0 +1,27 @@
+{
+  "symbols": ["XAUUSD", "EURUSD"],
+  "db_path": "aivo_trades.db",
+  "sessions_utc": {
+    "LONDON": [7, 16],
+    "NY": [12, 21],
+    "ASIA": [23, 7]
+  },
+  "rolling_days": 7,
+  "min_execs_per_session": 40,
+  "ema_alpha": 0.4,
+  "safety": {
+    "max_k_jump_abs": 0.2,
+    "max_latency_cap_jump_pct": 25,
+    "max_fixed_pts_jump_abs": 8
+  },
+  "update_files": true,
+  "schedule_utc": ["06:10", "11:10", "22:10"],
+  "out": {
+    "profiles_db": "aivo_calib_profiles.db",
+    "exec_overrides_dir": "configs",
+    "report_path": "online_calib_report.json"
+  },
+  "feature_flags": {
+    "gradual_apply_pct": 100
+  }
+}

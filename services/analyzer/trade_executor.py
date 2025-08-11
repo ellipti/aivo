@@ -8,6 +8,7 @@ import os
 from .adapters.interfaces import OrderRequest, OrderResult, Tick, BaseBroker
 from .utils.execution_log import log_exec
 from .utils.logger import info, warn
+from datetime import datetime, timezone
 
 
 def _deep_merge(a: dict, b: dict) -> dict:
@@ -20,14 +21,29 @@ def _deep_merge(a: dict, b: dict) -> dict:
     return out
 
 
-def load_exec_cfg(symbol: str | None = None, path: str = "configs/execution.json"):
+def _session_now_utc(sessions_utc: dict):
+    h = datetime.now(timezone.utc).hour
+    for name, rng in sessions_utc.items():
+        lo, hi = rng
+        if lo <= hi and lo <= h <= hi:
+            return name
+        if lo > hi and (h >= lo or h <= hi):
+            return name
+    return "OTHER"
+
+
+def load_exec_cfg(symbol: str | None = None, path: str = "configs/execution.json", sessions_file: str = "configs/online_calib.json"):
     base = json.load(open(path, "r", encoding="utf-8"))
-    if not symbol:
-        return base
-    alt = f"configs/execution.{str(symbol).upper()}.json"
-    if os.path.exists(alt):
-        spec = json.load(open(alt, "r", encoding="utf-8"))
-        return _deep_merge(base, spec)
+    if symbol:
+        alt = f"configs/execution.{str(symbol).upper()}.json"
+        if os.path.exists(alt):
+            base = _deep_merge(base, json.load(open(alt, "r", encoding="utf-8")))
+        if os.path.exists(sessions_file):
+            sess_cfg = json.load(open(sessions_file, "r", encoding="utf-8")).get("sessions_utc", {})
+            cur_sess = _session_now_utc(sess_cfg)
+            alt2 = f"configs/execution.{str(symbol).upper()}.{cur_sess}.json"
+            if os.path.exists(alt2):
+                base = _deep_merge(base, json.load(open(alt2, "r", encoding="utf-8")))
     return base
 
 

@@ -85,12 +85,14 @@ from . import portfolio_api
 from . import executions_api
 from . import slippage_api
 from . import calibrate_api
+from . import online_calib_api
 app.include_router(metrics.router)
 app.include_router(tuner_api.router)
 app.include_router(portfolio_api.router)
 app.include_router(executions_api.router)
 app.include_router(slippage_api.router)
 app.include_router(calibrate_api.router)
+app.include_router(online_calib_api.router)
 
 
 class Technical(BaseModel):
