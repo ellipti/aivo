@@ -1,0 +1,25 @@
+{
+  "symbols": ["XAUUSD", "EURUSD"],
+  "timeframe": "M30",
+  "strategies": [
+    { "id": "PATTERN_V1", "weight": 1.0, "min_conf": 60 },
+    { "id": "BREAKOUT_V2", "weight": 1.0, "min_conf": 55 },
+    { "id": "MEANREV_V1", "weight": 0.8, "min_conf": 58 }
+  ],
+  "ab_tests": {
+    "enabled": true,
+    "traffic_pct": 20,
+    "groups": {
+      "A": ["PATTERN_V1", "BREAKOUT_V2"],
+      "B": ["PATTERN_V1", "MEANREV_V1"]
+    },
+    "cooldown_minutes": 240,
+    "min_trades_per_arm": 30,
+    "promotion_rule": { "min_cumR_delta": 3.0, "min_hit_delta_pct": 3.0 }
+  },
+  "blend": {
+    "score_alpha": 0.5,
+    "perf_alpha": 0.5,
+    "direction_conflict_policy": "majority"
+  }
+}
