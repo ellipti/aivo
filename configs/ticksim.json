@@ -1,0 +1,27 @@
+{
+  "symbol": "XAUUSD",
+  "data": { "tick_path": "data/XAUUSD_TICK.csv" },
+  "point": 0.1,
+  "engine": {
+    "queue_init_depth": 8,
+    "arrival_rate_lambda": 22.0,
+    "cancel_rate_mu": 0.18,
+    "aggress_ratio": 0.42,
+    "max_wait_ms": 3500,
+    "mkt_impact_k": 0.6
+  },
+  "order": {
+    "side": "BUY",
+    "entry": 2360.0,
+    "sl": 2350.0,
+    "tp": 2380.0,
+    "lots": 0.5,
+    "place_offset_pts": 2
+  },
+  "out": {
+    "trades_csv": "ticksim_trades.csv",
+    "events_jsonl": "ticksim_events.jsonl",
+    "stats_json": "ticksim_stats.json"
+  },
+  "mc": { "runs": 50 }
+}
