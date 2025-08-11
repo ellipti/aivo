@@ -1,0 +1,6 @@
+{
+  "base_risk_pct": 1.0,
+  "atr_multiplier": 2.0,
+  "min_lot": 0.01,
+  "max_lot": 5.0
+}

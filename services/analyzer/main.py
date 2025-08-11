@@ -101,6 +101,7 @@ from . import routing_api
 from . import journal_api
 from . import optimizer_api
 from . import risk_api
+from . import sizing_api
 from . import ensemble_api
 app.include_router(metrics.router)
 app.include_router(tuner_api.router)
@@ -124,6 +125,7 @@ app.include_router(routing_api.router)
 app.include_router(journal_api.router)
 app.include_router(optimizer_api.router)
 app.include_router(risk_api.router)
+app.include_router(sizing_api.router)
 app.include_router(ensemble_api.router)
 
 
