@@ -1,0 +1,15 @@
+{
+  "risk_cap_pct": 2.0,
+  "per_trade_max_pct": 1.2,
+  "per_symbol_max_concurrent": 1,
+  "var": {
+    "lookback_trades": 60,
+    "confidence": 0.95
+  },
+  "decay": {
+    "lookback_trades": 40,
+    "min_hit_rate_pct": 35.0,
+    "min_avg_r": -0.3,
+    "cooldown_minutes": 240
+  }
+}

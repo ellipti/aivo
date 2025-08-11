@@ -45,15 +45,15 @@ def init_db():
   with _conn() as con:
     con.executescript(SCHEMA)
 
-def record_open(oid, symbol, side, entry, sl, tp, note=""):
+def record_open(oid, symbol, side, entry, sl, tp, note="", volume=None, risk_pct_used=None):
   opened_at = int(time.time())
   risk_pts = abs(entry - sl)
   rr_target = abs(tp - entry) / max(risk_pts, 1e-9)
   with _conn() as con:
     con.execute("""INSERT OR IGNORE INTO trades
-      (oid, symbol, side, entry, sl, tp, risk_pts, rr_target, opened_at, note)
-      VALUES (?,?,?,?,?,?,?,?,?,?)""",
-      (oid, symbol, side, entry, sl, tp, risk_pts, rr_target, opened_at, note))
+      (oid, symbol, side, entry, sl, tp, risk_pts, rr_target, opened_at, note, volume, risk_pct_used)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+      (oid, symbol, side, entry, sl, tp, risk_pts, rr_target, opened_at, note, volume, risk_pct_used))
 
 def record_close(oid, exit_price, exit_reason):
   closed_at = int(time.time())
