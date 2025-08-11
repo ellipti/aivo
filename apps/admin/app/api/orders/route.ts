@@ -1,5 +1,6 @@
-import { store } from '../../../lib/store';
-
 export async function GET() {
-  return Response.json({ items: store.orders });
+  const url = `${process.env['ADMIN_EXECUTOR_URL']}/orders`;
+  const res = await fetch(url, { cache: 'no-store' });
+  const json = await res.json();
+  return Response.json(json);
 }

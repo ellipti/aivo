@@ -1,6 +1,6 @@
 export async function GET() {
   const analyzerUrl = process.env['NEXT_PUBLIC_API_ANALYZER_URL'] || 'http://localhost:7001';
-  const executorUrl = process.env['NEXT_PUBLIC_API_EXECUTOR_URL'] || 'http://localhost:7002';
+  const executorUrl = process.env['ADMIN_EXECUTOR_URL'] || 'http://localhost:7002';
 
   async function ping(url: string) {
     const start = Date.now();

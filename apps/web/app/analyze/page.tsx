@@ -26,6 +26,7 @@ type Decision = {
 
 export default function AnalyzePage() {
   const [decision, setDecision] = useState<any | null>(null);
+  const [orderResult, setOrderResult] = useState<any | null>(null);
   const { add } = useToast();
   const {
     register,
@@ -55,16 +56,29 @@ export default function AnalyzePage() {
   };
 
   const execute = async () => {
-    await fetch('/api/orders/place', {
+    const side = String(decision?.decision || 'WAIT').toUpperCase();
+    const payload: any = {
+      instrument: 'XAUUSD',
+      units: 1000,
+      side,
+      entryType: 'market',
+    };
+    const headers: any = {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+    };
+    const res = await fetch('/api/orders/place', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        instrument: 'XAUUSD',
-        units: 1000,
-        side: (decision?.decision || 'wait').toLowerCase(),
-      }),
+      headers,
+      body: JSON.stringify(payload),
     });
-    add({ kind: 'success', message: 'Order sent' });
+    const json = await res.json().catch(() => ({}));
+    setOrderResult(json);
+    if (!res.ok) {
+      add({ kind: 'error', message: `Broker error: ${JSON.stringify(json)}` });
+      return;
+    }
+    add({ kind: 'success', message: 'Order executed' });
   };
 
   return (
@@ -105,6 +119,13 @@ export default function AnalyzePage() {
       </form>
 
       {decision && <DecisionCard data={decision} onExecute={execute} />}
+      {orderResult && (
+        <div className="rounded-md border p-4 text-sm">
+          <div>Ticket: {orderResult.order ?? orderResult.deal ?? '-'}</div>
+          <div>Retcode: {orderResult.retcode ?? '-'}</div>
+          <div>Comment: {orderResult.comment ?? '-'}</div>
+        </div>
+      )}
     </main>
   );
 }

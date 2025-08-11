@@ -42,7 +42,8 @@ app = FastAPI(title="AIVO Executor API")
 
 
 class PlaceOrderBody(BaseModel):
-  symbol: str = Field(alias="instrument")
+  instrument: Optional[str] = None
+  symbol: Optional[str] = None
   side: Literal["BUY", "SELL"]
   units: int
   entryType: Literal["market", "limit", "stop"] = "market"
@@ -113,6 +114,25 @@ async def orders_place(body: PlaceOrderBody, Idempotency_Key: Optional[str] = He
         if now_ms - cache[k][0] > window_ms:
             del cache[k]
     payload = body.model_dump(by_alias=True)
+    # Normalize instrument/symbol
+    core = (payload.get("instrument") or payload.get("symbol") or "").upper().replace("/", "")
+    if payload.get("symbol") and not payload.get("instrument"):
+        try:
+            print({"warn": "symbol_used_without_instrument", "symbol": payload.get("symbol")})
+        except Exception:
+            pass
+    if not core:
+        return JSONResponse(status_code=400, content={"error": True, "reason": "invalid_instrument"})
+    try:
+        resolved = mt5_adapter.resolve_symbol(core)
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"error": True, "reason": "resolve_failed", "message": str(e)})
+    payload["symbol"] = resolved
+    payload["instrument"] = resolved
+
+    # Auto classify pending if entry provided but no entryType
+    if (payload.get("entry") is not None) and (not payload.get("entryType") or payload.get("entryType") == ""):
+        payload["entryType"] = "limit"
     key = None
     if Idempotency_Key:
         m = hashlib.sha256()
@@ -199,6 +219,41 @@ async def broker_symbols():
         return unauthorized_response()
     data = mt5_adapter.list_symbols()
     return JSONResponse(data)
+
+
+@app.get("/broker/inspect")
+async def broker_inspect(instrument: Optional[str] = None, entry: Optional[float] = None, side: Optional[str] = None):
+    state = init_state()
+    if not state.get("authorized"):
+        return unauthorized_response()
+    core = (instrument or "").upper().replace("/", "")
+    if not core:
+        return JSONResponse(status_code=400, content={"error": True, "reason": "invalid_instrument"})
+    try:
+        resolved = mt5_adapter.resolve_symbol(core)
+        snap = mt5_adapter.symbol_snapshot(resolved)
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"error": True, "reason": "resolve_failed", "message": str(e)})
+    # decision preview
+    decision = None
+    try:
+        bid = float(snap.get("tick", {}).get("bid"))
+        ask = float(snap.get("tick", {}).get("ask"))
+        et = None
+        if entry is not None and side in ("BUY", "SELL"):
+            if side == "BUY":
+                et = "BUY_STOP" if float(entry) > ask else "BUY_LIMIT"
+            else:
+                et = "SELL_STOP" if float(entry) < bid else "SELL_LIMIT"
+        decision = {"type": et, "usedPrice": entry if entry is not None else (ask if side == "BUY" else bid)}
+    except Exception:
+        pass
+    return JSONResponse({
+        "core": core,
+        "resolved": resolved,
+        **snap,
+        "decisionPreview": decision,
+    })
 
 
 @app.post("/risk/position-size")

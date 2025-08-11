@@ -1,4 +1,5 @@
 'use client';
+import { useEffect, useState } from 'react';
 import {
   ResponsiveContainer,
   LineChart,
@@ -16,6 +17,25 @@ const timeData = Array.from({ length: 8 }).map((_, i) => ({
 }));
 
 export default function DashboardPage() {
+  const [positions, setPositions] = useState<number>(0);
+  const [orders, setOrders] = useState<number>(0);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [p, o] = await Promise.all([
+          fetch('/api/positions').then((r) => r.json()),
+          fetch('/api/orders').then((r) => r.json()),
+        ]);
+        setPositions((p?.items || []).length);
+        setOrders((o?.items || []).length);
+      } catch {
+        // ignore
+      }
+    };
+    load();
+  }, []);
+
   return (
     <div className="space-y-10">
       <section>
@@ -28,6 +48,16 @@ export default function DashboardPage() {
           <div className="rounded-lg border p-4">
             <div className="text-sm text-muted-foreground">Executor</div>
             <div className="text-xl font-bold">Healthy</div>
+          </div>
+        </div>
+        <div className="grid md:grid-cols-2 gap-4 mt-4">
+          <div className="rounded-lg border p-4">
+            <div className="text-sm text-muted-foreground">Open Positions</div>
+            <div className="text-2xl font-bold">{positions}</div>
+          </div>
+          <div className="rounded-lg border p-4">
+            <div className="text-sm text-muted-foreground">Pending Orders</div>
+            <div className="text-2xl font-bold">{orders}</div>
           </div>
         </div>
       </section>
