@@ -38,6 +38,7 @@ from time import perf_counter
 from collections import deque
 import hashlib
 from typing import Deque, Tuple
+import httpx
 
 # Load .env adjacent to this file
 load_dotenv(dotenv_path=Path(__file__).with_name(".env"))
@@ -332,4 +333,200 @@ async def metrics():
   for side, val in _metrics["aivo_orders_total"].items():
     lines.append(f'aivo_orders_total{{side="{side}"}} {val}')
   return JSONResponse("\n".join(lines))
+
+
+# -------- Policy --------
+def get_policy() -> Dict[str, Any]:
+  return {
+    "riskPct": float(os.getenv("MAX_RISK_PCT", "1.0")),
+    "minRR": float(os.getenv("MIN_RR", "1.5")),
+    "deviation": int(os.getenv("DEFAULT_DEVIATION", "10")),
+  }
+
+
+@app.get("/policy")
+async def policy():
+  return JSONResponse(get_policy())
+
+
+# -------- Auto trade pipeline --------
+class AnalyzeRequest(BaseModel):
+  instrument: str
+  timeframe: Literal["M1","M5","M15","M30","H1","H4","D1"]
+  user_context: Optional[str] = None
+
+
+class DecisionPayload(BaseModel):
+  decision: Literal["BUY","SELL","WAIT"]
+  entry: Optional[float]
+  stopLoss: Optional[float]
+  takeProfit: Optional[float]
+  confidence: float
+  rationale: str
+  risks: list[str]
+  tags: list[str]
+
+
+class AutoTradeRequest(BaseModel):
+  instrument: str
+  timeframe: str
+  riskPct: Optional[float] = None
+  user_context: Optional[str] = None
+
+
+class AutoTradeResponse(BaseModel):
+  analysis: DecisionPayload
+  policy: Dict[str, Any]
+  position: Optional[Dict[str, Any]] = None
+  order: Optional[Dict[str, Any]] = None
+  skipped: bool
+  reason: Optional[str] = None
+  hint: Optional[str] = None
+
+
+@app.post("/trade/auto")
+async def trade_auto(req: AutoTradeRequest, Idempotency_Key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
+  state = init_state()
+  if not state.get("authorized"):
+    return unauthorized_response()
+
+  core = (req.instrument or "").upper().replace("/", "")
+  try:
+    resolved = mt5_adapter.resolve_symbol(core)
+  except Exception as e:
+    return JSONResponse(status_code=400, content={"error": True, "reason": "resolve_failed", "message": str(e)})
+
+  # Step 1: call analyzer
+  analyzer_url = os.getenv("EXECUTOR_ANALYZER_URL", "http://localhost:7001").rstrip("/")
+  payload = {"symbol": core, "timeframe": req.timeframe, "user_context": req.user_context}
+  try:
+    async with httpx.AsyncClient(timeout=15.0) as client:
+      r = await client.post(f"{analyzer_url}/analyze", json=payload)
+      r.raise_for_status()
+      data = r.json()
+  except Exception as e:
+    return JSONResponse(status_code=502, content={"error": True, "reason": "analyzer_error", "message": str(e)})
+
+  # Step 2: validate decision
+  try:
+    analysis = DecisionPayload(**data)
+  except Exception as e:
+    return JSONResponse(status_code=502, content={"error": True, "reason": "analysis_invalid", "message": str(e)})
+
+  if analysis.decision == "WAIT" or analysis.entry is None or analysis.stopLoss is None or analysis.takeProfit is None:
+    return JSONResponse(AutoTradeResponse(analysis=analysis, policy=get_policy(), skipped=True, reason="decision_wait").model_dump())
+
+  rr = abs(analysis.takeProfit - analysis.entry) / max(abs(analysis.entry - analysis.stopLoss), 1e-9)
+  pol = get_policy()
+  if rr < float(pol["minRR"]):
+    return JSONResponse(AutoTradeResponse(analysis=analysis, policy={**pol, "rr": rr}, skipped=True, reason="rr_below_min").model_dump())
+
+  # Step 3: sizing
+  snap = mt5_adapter.symbol_snapshot(resolved)
+  ai = None
+  try:
+    import MetaTrader5 as mt5  # type: ignore
+    ai = mt5.account_info()
+  except Exception:
+    ai = None
+  balance = float(getattr(ai, "balance", 0.0) or 0.0)
+  risk_pct = float(req.riskPct if req.riskPct is not None else pol["riskPct"])
+  risk_amount = balance * (risk_pct / 100.0)
+  price_dist = abs(analysis.entry - analysis.stopLoss)
+  tick_value_per_lot = float(snap.get("trade_tick_value") or 0.0)
+  ticks_per_price_unit = 1.0 / float((snap.get("trade_tick_size") or 1.0))
+  loss_per_lot_at_sl = max(price_dist * ticks_per_price_unit * tick_value_per_lot, 1e-9)
+  lots_raw = risk_amount / loss_per_lot_at_sl
+  # snap lots to min/step
+  min_vol = float(snap.get("volume_min") or 0.01)
+  step = float(snap.get("volume_step") or 0.01)
+  precision = max(0, str(step)[::-1].find(".")) if isinstance(step, float) else 2
+  lots_rounded = max(min_vol, round(lots_raw / step) * step)
+  lots_rounded = round(lots_rounded, precision)
+  units = int(lots_rounded * int(os.getenv("MT5_UNITS_PER_LOT", "100000") or 100000))
+
+  # Step 4: execution
+  digits = int(snap.get("digits") or 5)
+  point = float(snap.get("point") or 0.01)
+  bid = float(snap.get("tick", {}).get("bid") or 0.0)
+  ask = float(snap.get("tick", {}).get("ask") or 0.0)
+  analysis.entry = round(float(analysis.entry), digits)
+  analysis.stopLoss = round(float(analysis.stopLoss), digits)
+  analysis.takeProfit = round(float(analysis.takeProfit), digits)
+  side = analysis.decision
+
+  # market vs pending
+  is_market = False
+  if side == "BUY":
+    is_market = abs(analysis.entry - ask) <= 2 * point
+  else:
+    is_market = abs(analysis.entry - bid) <= 2 * point
+
+  body = {
+    "instrument": resolved,
+    "side": side,
+    "units": units,
+    "sl": analysis.stopLoss,
+    "tp": analysis.takeProfit,
+    "deviation": pol["deviation"],
+  }
+  if is_market:
+    body["entryType"] = "market"
+  else:
+    body["entryType"] = "limit"
+    body["entry"] = analysis.entry
+
+  # Idempotency
+  if not hasattr(trade_auto, "_idem_cache"):
+    setattr(trade_auto, "_idem_cache", {})
+  cache: Dict[str, Tuple[int, Dict[str, Any]]] = getattr(trade_auto, "_idem_cache")  # type: ignore
+  now_ms = int(datetime.now().timestamp() * 1000)
+  window_ms = 10 * 60 * 1000
+  for k in list(cache.keys()):
+    if now_ms - cache[k][0] > window_ms:
+      del cache[k]
+  key = None
+  if Idempotency_Key:
+    m = hashlib.sha256()
+    m.update(Idempotency_Key.encode("utf-8"))
+    m.update(str(body).encode("utf-8"))
+    key = m.hexdigest()
+    if key in cache:
+      return JSONResponse(cache[key][1])
+
+  t0 = perf_counter()
+  order = mt5_adapter.place_order(body)
+  latency_ms = int((perf_counter() - t0) * 1000)
+
+  # structured log
+  try:
+    print({
+      "t": datetime.utcnow().isoformat() + "Z",
+      "action": "trade_auto",
+      "instrument": resolved,
+      "side": side,
+      "lots": lots_rounded,
+      "units": units,
+      "price": body.get("entry"),
+      "sl": body.get("sl"),
+      "tp": body.get("tp"),
+      "retcode": order.get("retcode"),
+      "ticket": order.get("order") or order.get("deal"),
+      "latency_ms": latency_ms,
+      "rr": rr,
+    })
+  except Exception:
+    pass
+
+  resp = AutoTradeResponse(
+    analysis=analysis,
+    policy={**pol, "rr": rr, "lots": lots_rounded, "units": units},
+    position=None,
+    order=order,
+    skipped=False,
+  )
+  data_resp = resp.model_dump()
+  if key:
+    cache[key] = (now_ms, data_resp)
+  return JSONResponse(data_resp)
 
