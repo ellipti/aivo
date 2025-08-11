@@ -1,0 +1,23 @@
+{
+  "tabs": [
+    {
+      "title": "Projects",
+      "shell": "powershell",
+      "command": "cd C:\\Projects; dir",
+      "split": "none"
+    },
+    {
+      "title": "Logs",
+      "shell": "powershell",
+      "command": "cd C:\\Logs; Get-Content .\\log.txt -Wait",
+      "split": "right"
+    },
+    {
+      "title": "Ping",
+      "shell": "cmd",
+      "command": "ping google.com",
+      "split": "down"
+    }
+  ],
+  "elevate_admin": false
+}
