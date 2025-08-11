@@ -1,0 +1,14 @@
+{
+  "pairs": [
+    { "a": "XAUUSD", "b": "DXY", "relation": "inverse", "method": "pearson", "min_abs": 0.6 },
+    { "a": "EURUSD", "b": "DXY", "relation": "inverse", "method": "pearson", "min_abs": 0.6 },
+    { "a": "US500", "b": "VIX", "relation": "inverse", "method": "pearson", "min_abs": 0.6 },
+    { "a": "USOIL", "b": "USDCAD", "relation": "direct", "method": "pearson", "min_abs": 0.5 }
+  ],
+  "regime": {
+    "atr_ratio_high": 1.5,
+    "atr_ratio_low": 0.7,
+    "bb_width_high": 0.02,
+    "bb_width_low": 0.005
+  }
+}
