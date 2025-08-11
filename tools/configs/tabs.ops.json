@@ -1,0 +1,12 @@
+{
+  "elevate_admin": true,
+  "tabs": [
+    {
+      "title": "Ops • Monitor",
+      "shell": "pwsh",
+      "command": "cd C:\\Ops; .\\monitor.ps1",
+      "split": "none"
+    },
+    { "title": "Ops • Ping", "shell": "cmd", "command": "ping 8.8.8.8 -t", "split": "right" }
+  ]
+}

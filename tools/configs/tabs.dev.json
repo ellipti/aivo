@@ -1,0 +1,23 @@
+{
+  "elevate_admin": false,
+  "tabs": [
+    {
+      "title": "Dev • API",
+      "shell": "pwsh",
+      "command": "cd C:\\Work\\api; uvicorn app.main:app --reload",
+      "split": "none"
+    },
+    {
+      "title": "Dev • Web",
+      "shell": "pwsh",
+      "command": "cd C:\\Work\\web; pnpm dev",
+      "split": "right"
+    },
+    {
+      "title": "Dev • Logs",
+      "shell": "pwsh",
+      "command": "cd C:\\Work\\logs; Get-Content app.log -Wait",
+      "split": "down"
+    }
+  ]
+}
