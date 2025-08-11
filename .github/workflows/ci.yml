@@ -1,4 +1,42 @@
 name: CI
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [develop]
+
+jobs:
+  web-admin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo lint
+      - run: pnpm turbo build
+
+  py-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: python -m pip install -r services/analyzer/requirements.txt
+      - run: python -m pip install -r services/executor/requirements.txt
+      - name: FastAPI schema check (import compiles)
+        run: |
+          python - << 'PY'
+          import importlib; import sys
+          sys.path.insert(0,'.')
+          importlib.import_module('services.analyzer.main')
+          importlib.import_module('services.executor.main')
+          print('ok')
+          PY
+
+name: CI
 
 on:
   push:
