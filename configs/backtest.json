@@ -1,0 +1,27 @@
+{
+  "data": {
+    "mode": "M1",
+    "path": "data/XAUUSD_M1.csv",
+    "tick_path": "data/XAUUSD_TICK.csv"
+  },
+  "symbol": "XAUUSD",
+  "risk": {
+    "start_balance": 10000.0,
+    "risk_pct": 1.0
+  },
+  "engine": {
+    "slippage_model": "spread_x_k",
+    "slippage_fixed_pts": 5,
+    "slippage_k": 0.35,
+    "latency_ms": 120,
+    "iceberg_chunks": 1
+  },
+  "tp_sl": {
+    "priority": "SL_first"
+  },
+  "out": {
+    "trades_csv": "bt_trades.csv",
+    "stats_json": "bt_stats.json",
+    "events_jsonl": "bt_events.jsonl"
+  }
+}
