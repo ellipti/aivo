@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 """
-Local run
+Local run (ATTACH-ONLY):
 
   uvicorn services.executor.main:app --host 0.0.0.0 --port 7002 --reload
+
+Behavior: attaches to a running MT5 terminal session. It will NOT login with
+credentials unless MT5_FORCE_LOGIN=true. If not authorized, trading endpoints
+return 503 with reason mt5_not_authorized.
 """
 
 import os
@@ -12,20 +16,22 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from typing import Literal
 
-from .mt5_adapter import (
-    init_mt5,
-    place_order,
-    close_order,
-    list_orders,
-    list_positions,
-)
+from . import mt5_adapter
 
 # Load .env adjacent to this file
 load_dotenv(dotenv_path=Path(__file__).with_name(".env"))
+
 MODE = "mt5"
+FORCE_LOGIN = os.getenv("MT5_FORCE_LOGIN", "false").lower() == "true"
+MT5_PATH = os.getenv("MT5_PATH") or None
+MT5_LOGIN = int(os.getenv("MT5_LOGIN")) if (os.getenv("MT5_LOGIN") and FORCE_LOGIN) else None
+MT5_PASSWORD = os.getenv("MT5_PASSWORD") if FORCE_LOGIN else None
+MT5_SERVER = os.getenv("MT5_SERVER") if FORCE_LOGIN else None
 
 
 app = FastAPI(title="AIVO Executor API")
@@ -51,116 +57,22 @@ class RiskPositionSizeBody(BaseModel):
   slPips: float
 
 
-def error_502(message: str, broker: Optional[dict] = None) -> HTTPException:
-  return HTTPException(status_code=502, detail={"error": True, "message": message, "broker": broker or {}})
+def init_state() -> Dict[str, Any]:
+  return mt5_adapter.init_mt5(
+      path=MT5_PATH,
+      force_login=FORCE_LOGIN,
+      login=MT5_LOGIN,
+      password=MT5_PASSWORD,
+      server=MT5_SERVER,
+  )
 
 
-# -------------------------- Broker: OANDA v20 -------------------------------
-
-
-def oanda_base_url() -> str:
-  return "https://api-fxpractice.oanda.com/v3" if OANDA_ENV == "practice" else "https://api-fxtrade.oanda.com/v3"
-
-
-def oanda_headers() -> Dict[str, str]:
-  return {"Authorization": f"Bearer {OANDA_API_KEY}", "Content-Type": "application/json"}
-
-
-async def oanda_health() -> Dict[str, Any]:
-  try:
-    url = f"{oanda_base_url()}/accounts/{OANDA_ACCOUNT_ID}"
-    async with httpx.AsyncClient(timeout=15) as client:
-      r = await client.get(url, headers=oanda_headers())
-      ok = r.status_code == 200
-      data = r.json() if r.content else {}
-      return {"ok": ok, "account": data.get("account", {}).get("id")}
-  except Exception as e:
-    return {"ok": False, "error": str(e)}
-
-
-async def oanda_place_order(body: PlaceOrderBody) -> Dict[str, Any]:
-  order: Dict[str, Any]
-  if body.entryType == "market":
-    order = {
-      "order": {
-        "type": "MARKET",
-        "timeInForce": "FOK",
-        "instrument": body.symbol,
-        "units": str(body.units if body.side == "BUY" else -abs(body.units)),
-        "positionFill": "DEFAULT",
-      }
-    }
-  else:
-    if body.limitPrice is None:
-      raise error_502("limitPrice required for limit orders")
-    order = {
-      "order": {
-        "type": "LIMIT",
-        "timeInForce": "GTC",
-        "price": f"{body.limitPrice:.5f}",
-        "instrument": body.symbol,
-        "units": str(body.units if body.side == "BUY" else -abs(body.units)),
-        "positionFill": "DEFAULT",
-      }
-    }
-  if body.tp is not None:
-    order["order"]["takeProfitOnFill"] = {"price": f"{body.tp:.5f}"}
-  if body.sl is not None:
-    order["order"]["stopLossOnFill"] = {"price": f"{body.sl:.5f}"}
-
-  try:
-    url = f"{oanda_base_url()}/accounts/{OANDA_ACCOUNT_ID}/orders"
-    async with httpx.AsyncClient(timeout=30) as client:
-      r = await client.post(url, headers=oanda_headers(), json=order)
-      if r.status_code >= 400:
-        raise error_502("broker_error", r.json())
-      return r.json()
-  except HTTPException:
-    raise
-  except Exception as e:
-    raise error_502("request_failed", {"error": str(e), "request": order})
-
-
-async def oanda_list_orders() -> Dict[str, Any]:
-  try:
-    url = f"{oanda_base_url()}/accounts/{OANDA_ACCOUNT_ID}/orders"
-    async with httpx.AsyncClient(timeout=30) as client:
-      r = await client.get(url, headers=oanda_headers())
-      if r.status_code >= 400:
-        raise error_502("broker_error", r.json())
-      return r.json()
-  except HTTPException:
-    raise
-  except Exception as e:
-    raise error_502("request_failed", {"error": str(e)})
-
-
-async def oanda_cancel_order(order_id: str) -> Dict[str, Any]:
-  try:
-    url = f"{oanda_base_url()}/accounts/{OANDA_ACCOUNT_ID}/orders/{order_id}/cancel"
-    async with httpx.AsyncClient(timeout=30) as client:
-      r = await client.put(url, headers=oanda_headers())
-      if r.status_code >= 400:
-        raise error_502("broker_error", r.json())
-      return r.json()
-  except HTTPException:
-    raise
-  except Exception as e:
-    raise error_502("request_failed", {"error": str(e)})
-
-
-async def oanda_positions() -> Dict[str, Any]:
-  try:
-    url = f"{oanda_base_url()}/accounts/{OANDA_ACCOUNT_ID}/openPositions"
-    async with httpx.AsyncClient(timeout=30) as client:
-      r = await client.get(url, headers=oanda_headers())
-      if r.status_code >= 400:
-        raise error_502("broker_error", r.json())
-      return r.json()
-  except HTTPException:
-    raise
-  except Exception as e:
-    raise error_502("request_failed", {"error": str(e)})
+def unauthorized_response() -> JSONResponse:
+  return JSONResponse(status_code=503, content={
+      "error": True,
+      "reason": "mt5_not_authorized",
+      "hint": "Open MT5 terminal, login to your account, then retry."
+  })
 
 
 # ------------------------------ Endpoints -----------------------------------
@@ -168,48 +80,51 @@ async def oanda_positions() -> Dict[str, Any]:
 
 @app.get("/health")
 async def health():
-    info = init_mt5()  # best-effort init
-    return {
-        "status": ("ok" if info.get("status") == "ok" else "degraded"),
+    state = init_state()
+    return JSONResponse({
+        "status": ("ok" if state.get("authorized") else state.get("status", "no_session")),
         "mode": MODE,
-        "terminal": info.get("terminal"),
-    }
+        "authorized": bool(state.get("authorized")),
+        "terminal": state.get("terminal"),
+        "account": state.get("account"),
+        "server": state.get("server"),
+    })
 
 
 @app.post("/orders/place")
 async def orders_place(body: PlaceOrderBody):
-    try:
-        init_mt5()
-        return place_order(body.model_dump(by_alias=True))
-    except Exception as e:
-        raise HTTPException(status_code=502, detail={"error": True, "reason": "broker_error", "message": str(e)})
+    state = init_state()
+    if not state.get("authorized"):
+        return unauthorized_response()
+    data = mt5_adapter.place_order(body.model_dump(by_alias=True))
+    return JSONResponse(data)
 
 
 @app.get("/orders")
 async def orders_list():
-    try:
-        init_mt5()
-        return list_orders()
-    except Exception as e:
-        raise HTTPException(status_code=502, detail={"error": True, "reason": "broker_error", "message": str(e)})
+    state = init_state()
+    if not state.get("authorized"):
+        return unauthorized_response()
+    data = mt5_adapter.list_orders()
+    return JSONResponse(data)
 
 
 @app.post("/orders/close")
 async def orders_close(body: CloseOrderBody):
-    try:
-        init_mt5()
-        return close_order(body.orderId)
-    except Exception as e:
-        raise HTTPException(status_code=502, detail={"error": True, "reason": "broker_error", "message": str(e)})
+    state = init_state()
+    if not state.get("authorized"):
+        return unauthorized_response()
+    data = mt5_adapter.close_order(body.orderId)
+    return JSONResponse(data)
 
 
 @app.get("/positions")
 async def positions():
-    try:
-        init_mt5()
-        return list_positions()
-    except Exception as e:
-        raise HTTPException(status_code=502, detail={"error": True, "reason": "broker_error", "message": str(e)})
+    state = init_state()
+    if not state.get("authorized"):
+        return unauthorized_response()
+    data = mt5_adapter.list_positions()
+    return JSONResponse(data)
 
 
 @app.post("/risk/position-size")
@@ -217,9 +132,9 @@ async def risk_position_size(body: RiskPositionSizeBody):
   risk_amount = body.balance * (body.riskPct / 100.0)
   pip_value_per_unit = 0.0001
   if body.slPips <= 0:
-    raise HTTPException(status_code=400, detail={"error": True, "message": "slPips must be > 0"})
+    return JSONResponse(status_code=400, content={"error": True, "message": "slPips must be > 0"})
   units = int(max(1, round(risk_amount / (body.slPips * pip_value_per_unit))))
-  return {"units": units}
+  return JSONResponse({"units": units})
 
 
 @app.get("/schedule/allowed-now")
@@ -238,5 +153,5 @@ async def schedule_allowed_now():
   now_t = dtime(now.hour, now.minute)
   window = (dtime(s_hour, s_min), dtime(e_hour, e_min))
   allowed = window[0] <= now_t <= window[1]
-  return {"allowed": allowed, "now": now.isoformat(), "window": {"start": start, "end": end, "tz": tzname}}
+  return JSONResponse({"allowed": allowed, "now": now.isoformat(), "window": {"start": start, "end": end, "tz": tzname}})
 
