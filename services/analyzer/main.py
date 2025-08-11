@@ -30,6 +30,7 @@ import httpx
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 from tenacity import retry, stop_after_attempt, wait_fixed
+from .utils.decision_validator import Decision as VDecision, parse_gpt, validate, DecisionError
 
 
 # ----------------------------------------------------------------------------
@@ -197,6 +198,27 @@ def apply_guardrails(d: ModelDecision) -> ModelDecision:
             d.decision = "WAIT"
             d.rationale += f" | Guardrail: RR {rr:.2f} < {MIN_RR:.2f} -> WAIT"
 
+    # Additional decision validation and filtering
+    try:
+        vd = VDecision(
+            decision=d.decision,
+            entry=d.entry,
+            sl=d.stopLoss,
+            tp=d.takeProfit,
+            reason=d.rationale,
+        )
+        vd = validate(vd, symbol="XAUUSD", min_rr=MIN_RR, min_distance_pts=10.0)
+        d.decision = vd.decision
+        d.entry = vd.entry
+        d.stopLoss = vd.sl
+        d.takeProfit = vd.tp
+        d.rationale = vd.reason or d.rationale
+    except DecisionError as e:
+        d.decision = "WAIT"
+        d.entry = None
+        d.stopLoss = None
+        d.takeProfit = None
+        d.rationale = (d.rationale + f" | Filtered: {e}").strip()
     return d
 
 
@@ -242,8 +264,23 @@ def call_openai_with_retry(system_prompt: str, user_prompt: str) -> ModelDecisio
         r.raise_for_status()
         data = r.json()
     text = _extract_output_text(data)
-    parsed = json.loads(text)
-    return ModelDecision.model_validate(parsed)
+    # Try strict parse first, then fallback to tolerant parser
+    try:
+        parsed = json.loads(text)
+        return ModelDecision.model_validate(parsed)
+    except Exception:
+        v = parse_gpt(text)
+        mapped = {
+            "decision": v.decision,
+            "entry": v.entry,
+            "stopLoss": v.sl,
+            "takeProfit": v.tp,
+            "confidence": 0.0,
+            "rationale": v.reason or "parsed_fallback",
+            "risks": [],
+            "tags": ["fallback_parser"],
+        }
+        return ModelDecision.model_validate(mapped)
 
 
 @app.get("/health")
