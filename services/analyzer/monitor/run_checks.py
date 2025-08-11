@@ -7,6 +7,7 @@ from .drift import collect_features, drift_tests
 from .perf_cliff import check_perf_cliff
 from .actions import apply_action
 from ..utils.logger import info, warn
+from ..orchestrator.runner import handle as run_playbooks
 
 DB = os.environ.get("AIVO_DB_PATH", "aivo_trades.db")
 
@@ -66,6 +67,10 @@ def run_checks():
             out["actions"].append({"symbol": sym, "action": action, "why": [msg_gap, msg_wick, msg_zspr]})
             push_alert(sym, f"DATA ANOMALY → {action} | {msg_gap}; {msg_wick}; {msg_zspr}", cfg["alerts"])
             apply_action(action)
+            try:
+                run_playbooks("DATA_ANOMALY", {"symbol": sym, "integrity": {"gaps": int(msg_gap.split('=')[-1])}, "reason": "; ".join([msg_gap, msg_wick, msg_zspr])})
+            except Exception:
+                pass
             continue
 
         wnd = cfg["feature_drift"]["window_bars"]
@@ -77,6 +82,10 @@ def run_checks():
             out["actions"].append({"symbol": sym, "action": action, "drift": drift})
             push_alert(sym, f"FEATURE DRIFT → {action} | {drift}", cfg["alerts"])
             apply_action(action)
+            try:
+                run_playbooks("DRIFT_ALERT", {"symbol": sym, "psi_max": max(v["psi"] for v in drift.values()), "ks_max": max(v["ks"] for v in drift.values()), "drift": {"psi": {"max": max(v["psi"] for v in drift.values())}, "ks": {"max": max(v["ks"] for v in drift.values())}}})
+            except Exception:
+                pass
 
         rs = last_closed_r(sym, cfg["perf_cliff"]["lookback_trades"])
         ok_perf, msg_perf = check_perf_cliff(
@@ -90,6 +99,12 @@ def run_checks():
             out["actions"].append({"symbol": sym, "action": action, "why": msg_perf})
             push_alert(sym, f"PERF CLIFF → {action} | {msg_perf}", cfg["alerts"])
             apply_action(action)
+            try:
+                rs_sum = sum(rs)
+                hit_pct = 100.0 * sum(1 for x in rs if x > 0) / max(1, len(rs))
+                run_playbooks("PERF_CLIFF", {"symbol": sym, "perf": {"cum_r": rs_sum, "hit_pct": hit_pct}})
+            except Exception:
+                pass
     return out
 
 

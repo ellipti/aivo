@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "globals": {
+    "cooldown_minutes": 10
+  },
+  "playbooks": [
+    {
+      "id": "PB_SAFE_ON_DRIFT",
+      "when": { "event": "DRIFT_ALERT", "any_symbol": true },
+      "if": [
+        { "metric": "drift.psi.max", "op": ">", "value": 0.25 },
+        { "metric": "drift.ks.max", "op": ">", "value": 0.18 }
+      ],
+      "then": [
+        { "action": "SAFE_MODE_ON", "reason": "feature_drift" },
+        { "action": "NOTIFY", "msg": "⚠️ Feature drift detected. SAFE_MODE applied." }
+      ]
+    },
+    {
+      "id": "PB_PAUSE_ON_PERF_CLIFF",
+      "when": { "event": "PERF_CLIFF", "symbols": ["XAUUSD", "EURUSD"] },
+      "if": [
+        { "metric": "perf.cum_r", "op": "<=", "value": -6.0 },
+        { "metric": "perf.hit_pct", "op": "<", "value": 32.0 }
+      ],
+      "then": [
+        { "action": "PAUSE", "minutes": 120, "reason": "perf_cliff" },
+        { "action": "NOTIFY", "msg": "⏸ Paused 2h due to performance cliff." }
+      ]
+    },
+    {
+      "id": "PB_ROTATE_SYMBOL",
+      "when": { "event": "DATA_ANOMALY", "any_symbol": false },
+      "if": [{ "metric": "integrity.gaps", "op": ">", "value": 3 }],
+      "then": [
+        { "action": "ROTATE_SYMBOL", "policy": "low_corr_high_vol" },
+        { "action": "NOTIFY", "msg": "🔁 Rotated symbol due to data gaps." }
+      ]
+    }
+  ]
+}
