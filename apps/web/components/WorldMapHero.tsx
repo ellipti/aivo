@@ -5,9 +5,10 @@ import { motion } from 'framer-motion';
 import worldData from 'world-atlas/countries-110m.json';
 
 const markers = [
-  { name: 'Ulaanbaatar', coordinates: [106.9057, 47.8864] },
   { name: 'London', coordinates: [-0.1276, 51.5074] },
   { name: 'New York', coordinates: [-74.006, 40.7128] },
+  { name: 'Tokyo', coordinates: [139.6917, 35.6895] },
+  { name: 'Sydney', coordinates: [151.2093, -33.8688] },
 ];
 
 export function WorldMapHero() {
@@ -45,13 +46,13 @@ export function WorldMapHero() {
           ))}
 
           <Annotation
-            subject={[106.9057, 47.8864] as any}
+            subject={[-0.1276, 51.5074] as any}
             dx={10}
             dy={-10}
             connectorProps={{ stroke: '#4f46e5', strokeWidth: 1, strokeLinecap: 'round' }}
           >
             <text x={4} y={-4} className="text-xs fill-current" style={{ fontSize: '10px' }}>
-              Ulaanbaatar
+              London
             </text>
           </Annotation>
         </ComposableMap>

@@ -14,15 +14,7 @@ const Schema = z.object({
 });
 type Values = z.infer<typeof Schema>;
 
-type Decision = {
-  action: 'BUY' | 'SELL' | 'WAIT';
-  entry?: number;
-  sl?: number;
-  tp?: number;
-  confidence: number;
-  rationale: string;
-  risks: string[];
-};
+// keep types lightweight; DecisionCard dictates rendering
 
 export default function AnalyzePage() {
   const [decision, setDecision] = useState<any | null>(null);
