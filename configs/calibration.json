@@ -1,0 +1,13 @@
+{
+  "symbols": ["XAUUSD", "EURUSD"],
+  "db_path": "aivo_trades.db",
+  "m1_csv": { "XAUUSD": "data/XAUUSD_M1.csv", "EURUSD": "data/EURUSD_M1.csv" },
+  "point": { "XAUUSD": 0.1, "EURUSD": 0.0001 },
+  "min_execs": 50,
+  "update_files": true,
+  "out": {
+    "exec_overrides_dir": "configs",
+    "ticksim_path": "configs/ticksim.json",
+    "report_path": "calibration_report.json"
+  }
+}

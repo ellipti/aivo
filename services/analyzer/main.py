@@ -82,9 +82,15 @@ app = FastAPI(title="AIVO Analyzer API")
 from . import metrics as metrics
 from . import tuner_api
 from . import portfolio_api
+from . import executions_api
+from . import slippage_api
+from . import calibrate_api
 app.include_router(metrics.router)
 app.include_router(tuner_api.router)
 app.include_router(portfolio_api.router)
+app.include_router(executions_api.router)
+app.include_router(slippage_api.router)
+app.include_router(calibrate_api.router)
 
 
 class Technical(BaseModel):
