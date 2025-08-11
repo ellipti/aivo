@@ -95,6 +95,7 @@ from . import exposure_api
 from . import exposure_sse
 from . import corr_api
 from . import incidents_api
+from . import news_api
 from . import ensemble_api
 app.include_router(metrics.router)
 app.include_router(tuner_api.router)
@@ -112,6 +113,7 @@ app.include_router(exposure_api.router)
 app.include_router(exposure_sse.router)
 app.include_router(corr_api.router)
 app.include_router(incidents_api.router)
+app.include_router(news_api.router)
 app.include_router(ensemble_api.router)
 
 

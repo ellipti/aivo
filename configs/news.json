@@ -1,0 +1,14 @@
+{
+  "provider": "tradingeconomics",
+  "api_base": "https://api.tradingeconomics.com/calendar",
+  "pre_pause_min": 15,
+  "post_event_risk_mult": 0.7,
+  "sentiment": { "enabled": true, "model": "openai" },
+  "country_map": {
+    "United States": ["XAUUSD", "EURUSD", "GBPUSD", "US500", "DXY"],
+    "Euro Area": ["EURUSD", "EURGBP"],
+    "United Kingdom": ["GBPUSD"],
+    "Japan": ["USDJPY"],
+    "China": ["USDCNH"]
+  }
+}
