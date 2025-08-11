@@ -6,4 +6,5 @@ httpx==0.27.2
 tenacity==8.5.0
 redis==5.0.7
 sqlite3-binary; python_version<'3.11'
+# scipy==1.13.1  # Optional: enables KS-test in drift detection
 
