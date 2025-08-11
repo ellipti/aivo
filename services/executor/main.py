@@ -68,7 +68,7 @@ class PlaceOrderBody(BaseModel):
 
 
 class CloseOrderBody(BaseModel):
-  orderId: str
+  orderId: Any
 
 
 class RiskPositionSizeBody(BaseModel):
@@ -85,6 +85,13 @@ def init_state() -> Dict[str, Any]:
       password=MT5_PASSWORD,
       server=MT5_SERVER,
   )
+
+
+def coerce_ticket(x: Any) -> int:
+  try:
+    return int(str(x).strip())
+  except Exception:
+    raise ValueError("orderId_must_be_integer")
 
 
 def unauthorized_response() -> JSONResponse:
@@ -196,7 +203,7 @@ async def orders_close(body: CloseOrderBody):
     # optional partial close via volumePct
     # Validate numeric orderId
     try:
-        int(body.orderId)
+        coerce_ticket(body.orderId)
     except Exception:
         return JSONResponse(status_code=400, content={"error": True, "reason": "orderId_must_be_integer"})
     volume_pct = None
@@ -219,7 +226,7 @@ async def orders_cancel(body: Dict[str, Any]):
         return unauthorized_response()
     order_id = str(body.get("orderId"))
     try:
-        int(order_id)
+        coerce_ticket(order_id)
     except Exception:
         return JSONResponse(status_code=400, content={"error": True, "reason": "orderId_must_be_integer"})
     try:
@@ -239,7 +246,7 @@ async def orders_modify(body: Dict[str, Any]):
     sl = body.get("sl")
     tp = body.get("tp")
     try:
-        int(order_id)
+        coerce_ticket(order_id)
     except Exception:
         return JSONResponse(status_code=400, content={"error": True, "reason": "orderId_must_be_integer"})
     try:
