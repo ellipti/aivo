@@ -9,6 +9,8 @@ from .adapters.interfaces import OrderRequest, OrderResult, Tick, BaseBroker
 from .utils.execution_log import log_exec
 from .utils.logger import info, warn
 from datetime import datetime, timezone
+from .utils.risk_regime import load_cfg as load_risk_cfg, detect_regime, select_profile, adjust_tp_sl_rr
+from .backtest.data_loader import load_m1_csv
 
 
 def _deep_merge(a: dict, b: dict) -> dict:
@@ -94,6 +96,35 @@ def place_slippage_aware(
     fallback_policy: dict | None = None,
 ) -> Tuple[bool, str, float]:
     point = broker.get_point(req.symbol)
+    # Regime-aware adjustments (pre-trade)
+    try:
+        rr_cfg = load_risk_cfg()
+        # Load last N M1 rows for ATR calc if path available in backtest config; optional safety
+        m1_path = None
+        # attempt to use execution config hint path if exists
+        # Fallback: skip if no data
+        m1_rows = []
+        if m1_path and os.path.exists(m1_path):
+            m1_rows = load_m1_csv(m1_path)[-100:]
+        last_tick = {"bid": broker.get_tick(req.symbol).bid, "ask": broker.get_tick(req.symbol).ask}
+        regime = detect_regime(m1_rows, last_tick, point, rr_cfg, req.symbol)
+        prof = select_profile(regime, rr_cfg.get("mapping", {}))
+        if rr_cfg.get("apply", {}).get("tp_sl", True):
+            # only adjust if req has entry; keep SL/TP if already provided
+            base_entry = req.entry
+            if base_entry:
+                new_tp, new_sl, _ = adjust_tp_sl_rr(base_entry, req.side, point, prof)
+                req = OrderRequest(
+                    symbol=req.symbol,
+                    side=req.side,
+                    volume=req.volume * float(prof.get("lot_mult", 1.0)) if rr_cfg.get("apply", {}).get("lot_multiplier", True) else req.volume,
+                    entry=req.entry,
+                    sl=(req.sl or new_sl),
+                    tp=(req.tp or new_tp),
+                    comment=req.comment,
+                )
+    except Exception:
+        pass
     snaps = _snapshots(broker, req.symbol, n=pre_n, iv_ms=pre_iv_ms)
     spread_bad = any(_spread_pts(s, point) > max_spread_pts for s in snaps)
     if spread_bad:

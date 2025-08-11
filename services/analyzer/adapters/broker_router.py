@@ -7,6 +7,7 @@ from typing import List, Tuple
 from .interfaces import OrderRequest, OrderResult
 from ..trade_executor import load_exec_cfg, place_slippage_aware
 from .mt5_adapter import MT5Broker
+from ..utils.risk_regime import load_cfg as load_risk_cfg, detect_regime, select_profile
 
 
 class BrokerRouter:
@@ -97,6 +98,17 @@ class BrokerRouter:
         parts = self.split_risk(req.symbol, lots_total)
         outcomes = []
         import time as _t
+        # regime-aware lot multiplier per account chunk
+        try:
+            rr_cfg = load_risk_cfg()
+            # We do not have M1 path here; use empty to rely on spread-only for liq and default vol mapping
+            last_tick = getattr(next(iter(self.brokers.values()))[1], "get_tick")(req.symbol)
+            point = getattr(next(iter(self.brokers.values()))[1], "get_point")(req.symbol)
+            regime = detect_regime([], {"bid": last_tick.bid, "ask": last_tick.ask}, point, rr_cfg, req.symbol)
+            prof = select_profile(regime, rr_cfg.get("mapping", {}))
+            lot_mult = float(prof.get("lot_mult", 1.0)) if rr_cfg.get("apply", {}).get("lot_multiplier", True) else 1.0
+        except Exception:
+            lot_mult = 1.0
         for acc, broker, vol in parts:
             ok, reason, avg_fill = place_slippage_aware(
                 broker=broker,
@@ -104,7 +116,7 @@ class BrokerRouter:
                 req=OrderRequest(
                     symbol=req.symbol,
                     side=req.side,
-                    volume=vol,
+                    volume=round(vol * lot_mult, 2),
                     entry=req.entry,
                     sl=req.sl,
                     tp=req.tp,
