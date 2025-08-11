@@ -8,6 +8,18 @@ Local run (ATTACH-ONLY):
 Behavior: attaches to a running MT5 terminal session. It will NOT login with
 credentials unless MT5_FORCE_LOGIN=true. If not authorized, trading endpoints
 return 503 with reason mt5_not_authorized.
+
+Examples:
+  - Place market:
+    POST /orders/place {"instrument":"XAUUSD","side":"BUY","units":10000,"entryType":"market","sl":3368,"tp":3390}
+  - Place pending auto STOP/LIMIT:
+    POST /orders/place {"instrument":"XAUUSD","side":"BUY","units":10000,"entry":3378,"sl":3368,"tp":3390}
+  - Modify SL/TP:
+    POST /orders/modify {"orderId":"123456","sl":3365,"tp":3395}
+  - Partial close 50%:
+    POST /orders/close {"orderId":"123456","volumePct":50}
+  - Cancel pending:
+    POST /orders/cancel {"orderId":"123456"}
 """
 
 import os
@@ -191,6 +203,23 @@ async def orders_close(body: CloseOrderBody):
     return JSONResponse(data)
 
 
+@app.post("/orders/cancel")
+async def orders_cancel(body: Dict[str, Any]):
+    state = init_state()
+    if not state.get("authorized"):
+        return unauthorized_response()
+    order_id = str(body.get("orderId"))
+    try:
+        data = mt5_adapter.close_order(order_id)  # remove pending handled inside
+        return JSONResponse(data)
+    except Exception as e:
+        return JSONResponse(status_code=502, content={
+            "error": True,
+            "reason": "broker_error",
+            "message": str(e),
+        })
+
+
 @app.post("/orders/modify")
 async def orders_modify(body: Dict[str, Any]):
     state = init_state()
@@ -199,8 +228,12 @@ async def orders_modify(body: Dict[str, Any]):
     order_id = str(body.get("orderId"))
     sl = body.get("sl")
     tp = body.get("tp")
-    data = mt5_adapter.modify_order(order_id, sl=sl, tp=tp)
-    return JSONResponse(data)
+    try:
+        data = mt5_adapter.modify_order(order_id, sl=sl, tp=tp)
+        return JSONResponse(data)
+    except Exception as e:
+        snap = {"error": True, "reason": "broker_error", "message": str(e)}
+        return JSONResponse(status_code=502, content=snap)
 
 
 @app.get("/positions")
