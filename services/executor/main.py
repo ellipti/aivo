@@ -39,6 +39,7 @@ from collections import deque
 import hashlib
 from typing import Deque, Tuple
 import httpx
+from sqlmodel import SQLModel, Field, Session, create_engine, select
 
 # Load .env adjacent to this file
 load_dotenv(dotenv_path=Path(__file__).with_name(".env"))
@@ -263,6 +264,16 @@ async def positions():
     if not state.get("authorized"):
         return unauthorized_response()
     data = mt5_adapter.list_positions()
+    # Snapshot positions (coarse sampling)
+    try:
+      from json import dumps
+      now = datetime.utcnow()
+      with Session(engine) as s:
+        for p in data.get("items", []):
+          s.add(PositionSnapshot(ts=now, ticket=int(p.get("ticket")), instrument=str(p.get("symbol")), side=("BUY" if int(p.get("type", 0))==0 else "SELL"), lots=float(p.get("volume", 0.0) or 0.0), price=float(p.get("price_current", 0.0) or 0.0), sl=p.get("sl"), tp=p.get("tp")))
+        s.commit()
+    except Exception:
+      pass
     return JSONResponse(data)
 
 
@@ -354,7 +365,41 @@ async def metrics():
   lines.append("# TYPE aivo_orders_total counter")
   for side, val in _metrics["aivo_orders_total"].items():
     lines.append(f'aivo_orders_total{{side="{side}"}} {val}')
+  # positions open gauge
+  try:
+    with Session(engine) as s:
+      # last snapshots not aggregated; simple count of distinct latest tickets is complex; fallback: open count via adapter
+      open_cnt = len(mt5_adapter.list_positions().get("items", []))
+      lines.append("# HELP aivo_positions_open Number of open positions")
+      lines.append("# TYPE aivo_positions_open gauge")
+      lines.append(f"aivo_positions_open {open_cnt}")
+  except Exception:
+    pass
   return JSONResponse("\n".join(lines))
+
+
+@app.get("/history/executions")
+async def history_executions(limit: int = 100, symbol: Optional[str] = None):
+  try:
+    with Session(engine) as s:
+      stmt = select(Execution).order_by(Execution.id.desc()).limit(limit)
+      if symbol:
+        from sqlalchemy import or_
+        stmt = select(Execution).where(Execution.instrument == symbol).order_by(Execution.id.desc()).limit(limit)
+      rows = s.exec(stmt).all()
+      return JSONResponse({"items": [r.model_dump() for r in rows]})
+  except Exception as e:
+    return JSONResponse(status_code=500, content={"error": True, "message": str(e)})
+
+
+@app.get("/history/audit")
+async def history_audit(limit: int = 100):
+  try:
+    with Session(engine) as s:
+      rows = s.exec(select(AuditLog).order_by(AuditLog.id.desc()).limit(limit)).all()
+      return JSONResponse({"items": [r.model_dump() for r in rows]})
+  except Exception as e:
+    return JSONResponse(status_code=500, content={"error": True, "message": str(e)})
 
 
 # -------- Policy --------
@@ -404,6 +449,58 @@ class AutoTradeResponse(BaseModel):
   skipped: bool
   reason: Optional[str] = None
   hint: Optional[str] = None
+
+
+# -------- Persistence (SQLite) --------
+DB_PATH = os.getenv("EXECUTOR_DB_PATH", "services/executor/state.db")
+engine = create_engine(f"sqlite:///{DB_PATH}", echo=False)
+
+
+class Execution(SQLModel, table=True):
+  id: Optional[int] = Field(default=None, primary_key=True)
+  ts: datetime = Field(default_factory=datetime.utcnow)
+  instrument: str
+  side: Optional[str] = None
+  lots: Optional[float] = None
+  entry: Optional[float] = None
+  sl: Optional[float] = None
+  tp: Optional[float] = None
+  retcode: Optional[int] = None
+  ticket: Optional[int] = None
+  comment: Optional[str] = None
+  rr: Optional[float] = None
+  mode: str = Field(default=MODE)
+
+
+class PositionSnapshot(SQLModel, table=True):
+  id: Optional[int] = Field(default=None, primary_key=True)
+  ts: datetime = Field(default_factory=datetime.utcnow)
+  ticket: int
+  instrument: str
+  side: Optional[str] = None
+  lots: Optional[float] = None
+  price: Optional[float] = None
+  sl: Optional[float] = None
+  tp: Optional[float] = None
+
+
+class AuditLog(SQLModel, table=True):
+  id: Optional[int] = Field(default=None, primary_key=True)
+  ts: datetime = Field(default_factory=datetime.utcnow)
+  action: str
+  payload: Optional[str] = None
+  result: Optional[str] = None
+  latency_ms: Optional[int] = None
+
+
+def init_db() -> None:
+  try:
+    SQLModel.metadata.create_all(engine)
+  except Exception:
+    pass
+
+
+init_db()
 
 
 @app.post("/trade/auto")
@@ -548,6 +645,15 @@ async def trade_auto(req: AutoTradeRequest, Idempotency_Key: Optional[str] = Hea
     skipped=False,
   )
   data_resp = resp.model_dump()
+  # Persist audit/execution (best-effort)
+  try:
+    from json import dumps
+    with Session(engine) as s:
+      s.add(AuditLog(action="trade_auto", payload=dumps(body), result=dumps(order), latency_ms=latency_ms))
+      s.add(Execution(instrument=resolved, side=side, lots=resp.policy.get("lots"), entry=body.get("entry"), sl=body.get("sl"), tp=body.get("tp"), retcode=order.get("retcode"), ticket=order.get("order") or order.get("deal"), comment=order.get("comment"), rr=rr))
+      s.commit()
+  except Exception:
+    pass
   if key:
     cache[key] = (now_ms, data_resp)
   return JSONResponse(data_resp)
