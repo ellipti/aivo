@@ -9,6 +9,7 @@ from .utils.db import record_open
 from .utils.logger import info
 from .adapters.broker_router import BrokerRouter
 from .strategies.base import StrategyAdapter, StratDecision
+from .monitor.actions import is_paused
 
 # Placeholders for your data access
 def load_latest_ohlcv_rows(symbol: str, timeframe: str):
@@ -51,6 +52,9 @@ def next_decision(symbol: str, rows):
 
 
 def run_cycle(symbol: str, timeframe: str):
+    paused, why = is_paused()
+    if paused:
+        return
     rows = load_latest_ohlcv_rows(symbol, timeframe)
     if len(rows) < 50:
         return

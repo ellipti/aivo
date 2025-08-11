@@ -1,0 +1,35 @@
+{
+  "symbols": ["XAUUSD", "EURUSD"],
+  "timeframe": "M30",
+  "point": { "XAUUSD": 0.1, "EURUSD": 0.0001 },
+
+  "data_integrity": {
+    "max_gap_bars": 3,
+    "max_wick_ratio": 8.0,
+    "zero_spread_bars_cap": 1
+  },
+
+  "feature_drift": {
+    "window_bars": 500,
+    "ks_threshold": 0.18,
+    "psi_threshold": 0.25
+  },
+
+  "perf_cliff": {
+    "lookback_trades": 40,
+    "min_hit_pct": 32.0,
+    "min_avg_r": -0.35,
+    "trigger_drawdown_r": -6.0
+  },
+
+  "actions": {
+    "on_data_anomaly": "PAUSE_15M",
+    "on_drift": "SAFE_MODE",
+    "on_perf_cliff": "PAUSE_2H"
+  },
+
+  "alerts": {
+    "telegram": true,
+    "webhook": null
+  }
+}
