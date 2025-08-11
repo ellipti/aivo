@@ -1,0 +1,18 @@
+{
+  "csv_path": "data/XAUUSD_M30.csv",
+  "guardrails_path": "configs/guardrails.json",
+  "rolling_window_bars": 3000,
+  "batch_size": 8,
+  "candidate_jitter": {
+    "rr": [-0.3, 0.0, 0.3],
+    "min_stop_pts": [-5, 0, 5]
+  },
+  "base_params": { "rr": 2.0, "min_stop_pts": 10 },
+  "accept_rules": {
+    "min_closed": 30,
+    "improve_cum_r": 2.0,
+    "no_hit_rate_drop_pct": 5.0
+  },
+  "cooldown_minutes": 60,
+  "out_csv": "tuner_last.csv"
+}

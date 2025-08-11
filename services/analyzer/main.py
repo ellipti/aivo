@@ -79,6 +79,10 @@ if not logger.handlers:
 # ----------------------------------------------------------------------------
 
 app = FastAPI(title="AIVO Analyzer API")
+from . import metrics as metrics
+from . import tuner_api
+app.include_router(metrics.router)
+app.include_router(tuner_api.router)
 
 
 class Technical(BaseModel):
