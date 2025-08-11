@@ -13,6 +13,14 @@ from typing import Any, Dict, Literal, Optional
 import httpx
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
+from .mt5_adapter import (
+  init_mt5,
+  resolve_symbol,
+  place_order,
+  close_order,
+  list_orders,
+  list_positions,
+)
 
 
 MODE: Literal["oanda", "mt5"] = os.getenv("MODE", "oanda").lower()  # default: oanda
@@ -161,27 +169,53 @@ async def oanda_positions() -> Dict[str, Any]:
 
 @app.get("/health")
 async def health():
+  if MODE == "mt5":
+    info = init_mt5()  # best-effort init
+    return {"status": ("ok" if info.get("status") == "ok" else "degraded"), "mode": MODE, "terminal": info.get("terminal")}
   return {"status": "ok", "mode": MODE}
 
 
 @app.post("/orders/place")
 async def orders_place(body: PlaceOrderBody):
-  payload = await oanda_place_order(body)
-  return payload
+  if MODE == "mt5":
+    try:
+      init_mt5()
+      return place_order(body.model_dump(by_alias=True))
+    except Exception as e:
+      raise HTTPException(status_code=502, detail={"error": True, "reason": "broker_error", "message": str(e)})
+  return await oanda_place_order(body)
 
 
 @app.get("/orders")
 async def orders_list():
+  if MODE == "mt5":
+    try:
+      init_mt5()
+      return list_orders()
+    except Exception as e:
+      raise HTTPException(status_code=502, detail={"error": True, "reason": "broker_error", "message": str(e)})
   return await oanda_list_orders()
 
 
 @app.post("/orders/close")
 async def orders_close(body: CloseOrderBody):
+  if MODE == "mt5":
+    try:
+      init_mt5()
+      return close_order(body.orderId)
+    except Exception as e:
+      raise HTTPException(status_code=502, detail={"error": True, "reason": "broker_error", "message": str(e)})
   return await oanda_cancel_order(body.orderId)
 
 
 @app.get("/positions")
 async def positions():
+  if MODE == "mt5":
+    try:
+      init_mt5()
+      return list_positions()
+    except Exception as e:
+      raise HTTPException(status_code=502, detail={"error": True, "reason": "broker_error", "message": str(e)})
   return await oanda_positions()
 
 
