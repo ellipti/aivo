@@ -1,0 +1,22 @@
+{
+  "enabled": {
+    "scalping": true,
+    "swing": true,
+    "news": true
+  },
+  "risk_multiplier": {
+    "scalping": 0.8,
+    "swing": 1.0,
+    "news": 0.6
+  },
+  "weights": {
+    "scalping": 1.0,
+    "swing": 1.0,
+    "news": 0.7
+  },
+  "activation": {
+    "scalping": { "vol": ["HIGH"], "sessions": ["LONDON", "NY"] },
+    "swing": { "vol": ["MID", "LOW"], "sessions": ["LONDON", "NY", "ASIA"] },
+    "news": { "news_window_min": 30 }
+  }
+}
