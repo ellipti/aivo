@@ -1,19 +1,62 @@
 version: '3.9'
+name: aivo
 services:
   analyzer:
     build:
-      context: ./services/analyzer
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/analyzer/Dockerfile
     env_file:
-      - ./services/analyzer/.env.example
+      - services/analyzer/.env.example
+    environment:
+      - RESPONSE_TOKENS=800
+      - TEMPERATURE=0.2
+    networks:
+      - aivo
     ports:
-      - '8001:8000'
+      - '7001:8000'
+
   executor:
     build:
-      context: ./services/executor
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/executor/Dockerfile
     env_file:
-      - ./services/executor/.env.example
+      - services/executor/.env.example
+    networks:
+      - aivo
     ports:
-      - '8002:8000'
+      - '7002:8000'
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      - NEXT_PUBLIC_API_ANALYZER_URL=http://analyzer:8000
+      - NEXT_PUBLIC_API_EXECUTOR_URL=http://executor:8000
+    depends_on:
+      - analyzer
+      - executor
+    networks:
+      - aivo
+    ports:
+      - '3000:3000'
+
+  admin:
+    build:
+      context: .
+      dockerfile: apps/admin/Dockerfile
+    environment:
+      - NEXT_PUBLIC_API_ANALYZER_URL=http://analyzer:8000
+      - NEXT_PUBLIC_API_EXECUTOR_URL=http://executor:8000
+    depends_on:
+      - analyzer
+      - executor
+    networks:
+      - aivo
+    ports:
+      - '3001:3001'
+
+networks:
+  aivo:
+    driver: bridge
 

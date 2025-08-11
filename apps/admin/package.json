@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3001",
     "build": "next build",
     "start": "next start",
     "lint": "eslint ."
@@ -19,7 +19,13 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "lucide-react": "^0.441.0",
-    "tailwind-merge": "^2.5.2"
+    "tailwind-merge": "^2.5.2",
+    "react-hook-form": "^7.52.1",
+    "@hookform/resolvers": "^3.9.0",
+    "zod": "^3.23.8",
+    "framer-motion": "^11.2.12",
+    "next-themes": "^0.3.0",
+    "recharts": "^2.12.7"
   },
   "devDependencies": {
     "@types/node": "^20.12.12",
@@ -31,4 +37,3 @@
     "typescript": "^5.5.4"
   }
 }
-

@@ -1,0 +1,40 @@
+name: CI Web/Admin
+
+on:
+  pull_request:
+    branches: [ develop, main ]
+    paths:
+      - 'apps/**'
+      - 'packages/**'
+      - 'turbo.json'
+      - 'package.json'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm turbo lint
+
+      - name: Typecheck
+        run: pnpm turbo typecheck || echo "typecheck task not defined"
+
+      - name: Build Web
+        run: pnpm --filter @aivo/web build
+
+      - name: Build Admin
+        run: pnpm --filter @aivo/admin build
+

@@ -1,0 +1,19 @@
+{
+  "riskPolicy": {
+    "maxRiskPct": 1,
+    "maxConcurrentTrades": 3,
+    "minRR": 1.5,
+    "atrMultiplierForSL": 1.5
+  },
+  "schedule": {
+    "timezone": "Asia/Ulaanbaatar",
+    "sessions": {
+      "tokyo": true,
+      "london": true,
+      "newyork": true
+    }
+  },
+  "newsFilter": {
+    "highImpactOnly": true
+  }
+}
