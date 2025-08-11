@@ -1,0 +1,13 @@
+{
+  "timeline_window_sec": 1800,
+  "rca": {
+    "lookback_sec": 3600,
+    "slip_pts_spike": 25,
+    "latency_cap_over_ms": 900,
+    "spread_high_pts": 35
+  },
+  "export": {
+    "md_dir": "incidents/",
+    "html_dir": "incidents/"
+  }
+}
