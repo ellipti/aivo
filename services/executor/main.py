@@ -194,14 +194,22 @@ async def orders_close(body: CloseOrderBody):
     if not state.get("authorized"):
         return unauthorized_response()
     # optional partial close via volumePct
-    volume_pct: Optional[float] = None
+    # Validate numeric orderId
     try:
-        # if JSON contains it, pydantic won't parse here (not in model) so extract manually is simpler
-        volume_pct = None
+        int(body.orderId)
     except Exception:
-        volume_pct = None
-    data = mt5_adapter.close_order(body.orderId, volume_pct=volume_pct)
-    return JSONResponse(data)
+        return JSONResponse(status_code=400, content={"error": True, "reason": "orderId_must_be_integer"})
+    volume_pct = None
+    try:
+        payload = await (JSONResponse).request  # type: ignore
+    except Exception:
+        payload = None
+    try:
+        data = mt5_adapter.close_order(body.orderId, volume_pct=volume_pct)
+        return JSONResponse(data)
+    except Exception as e:
+        detail = getattr(e, "args", [{}])
+        return JSONResponse(status_code=502, content=detail[0] if isinstance(detail and detail[0], dict) else {"error": True, "reason": "broker_error", "message": str(e)})
 
 
 @app.post("/orders/cancel")
@@ -211,14 +219,15 @@ async def orders_cancel(body: Dict[str, Any]):
         return unauthorized_response()
     order_id = str(body.get("orderId"))
     try:
-        data = mt5_adapter.close_order(order_id)  # remove pending handled inside
+        int(order_id)
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": True, "reason": "orderId_must_be_integer"})
+    try:
+        data = mt5_adapter.cancel_order(order_id)
         return JSONResponse(data)
     except Exception as e:
-        return JSONResponse(status_code=502, content={
-            "error": True,
-            "reason": "broker_error",
-            "message": str(e),
-        })
+        detail = getattr(e, "args", [{}])
+        return JSONResponse(status_code=502, content=detail[0] if isinstance(detail and detail[0], dict) else {"error": True, "reason": "broker_error", "message": str(e)})
 
 
 @app.post("/orders/modify")
@@ -230,11 +239,15 @@ async def orders_modify(body: Dict[str, Any]):
     sl = body.get("sl")
     tp = body.get("tp")
     try:
+        int(order_id)
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": True, "reason": "orderId_must_be_integer"})
+    try:
         data = mt5_adapter.modify_order(order_id, sl=sl, tp=tp)
         return JSONResponse(data)
     except Exception as e:
-        snap = {"error": True, "reason": "broker_error", "message": str(e)}
-        return JSONResponse(status_code=502, content=snap)
+        detail = getattr(e, "args", [{}])
+        return JSONResponse(status_code=502, content=detail[0] if isinstance(detail and detail[0], dict) else {"error": True, "reason": "broker_error", "message": str(e)})
 
 
 @app.get("/positions")
@@ -286,6 +299,8 @@ async def broker_inspect(instrument: Optional[str] = None, entry: Optional[float
         "core": core,
         "resolved": resolved,
         **snap,
+        "min_stops_points": mt5_adapter.mt5.symbol_info(resolved).trade_stops_level if hasattr(mt5_adapter, 'mt5') and mt5_adapter.mt5 else None,
+        "min_stops_price": (mt5_adapter.mt5.symbol_info(resolved).trade_stops_level * (mt5_adapter.mt5.symbol_info(resolved).point)) if hasattr(mt5_adapter, 'mt5') and mt5_adapter.mt5 else None,
         "decisionPreview": decision,
     })
 
