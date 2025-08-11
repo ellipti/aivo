@@ -9,18 +9,25 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "next": "14.2.5",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "zustand": "^4.5.4",
-    "next-intl": "^3.17.2",
-    "react-simple-maps": "^3.0.0",
     "@aivo/shared": "workspace:*",
     "@aivo/ui": "workspace:*",
+    "@hookform/resolvers": "^3.9.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
+    "framer-motion": "^11.2.12",
     "lucide-react": "^0.441.0",
-    "tailwind-merge": "^2.5.2"
+    "next": "14.2.5",
+    "next-intl": "^3.17.2",
+    "next-themes": "^0.3.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-hook-form": "^7.52.1",
+    "react-simple-maps": "^3.0.0",
+    "tailwind-merge": "^2.5.2",
+    "topojson-client": "^3.1.0",
+    "world-atlas": "^2.0.2",
+    "zod": "^3.23.8",
+    "zustand": "^4.5.4"
   },
   "devDependencies": {
     "@types/node": "^20.12.12",
@@ -32,4 +39,3 @@
     "typescript": "^5.5.4"
   }
 }
-

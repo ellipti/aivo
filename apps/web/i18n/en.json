@@ -1,0 +1,27 @@
+{
+  "title": "AIVO AI TRADE",
+  "subtitle": "GPT-based research + automated trading",
+  "dashboard": {
+    "heading": "Dashboard",
+    "kpis": ["PnL", "Win Rate", "Sharpe", "Open Trades"],
+    "orders": "Orders",
+    "signals": "Signals",
+    "cta": "GPT Analyze"
+  },
+  "analyze": {
+    "heading": "Analyze",
+    "symbol": "Symbol",
+    "timeframe": "Timeframe",
+    "useTechnicals": "Use Technicals",
+    "useNews": "Use News Filter",
+    "run": "Run GPT Analyze",
+    "execute": "Execute Trade",
+    "discard": "Discard",
+    "decision": "Decision",
+    "entry": "Entry",
+    "sl": "SL",
+    "tp": "TP",
+    "confidence": "Confidence",
+    "rationale": "Rationale"
+  }
+}
