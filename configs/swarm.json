@@ -1,0 +1,5 @@
+{
+  "guards": [{ "type": "PNL_GUARD", "params": { "limit_dd": -6.0 } }],
+  "recovery": [{ "type": "MT5_RECONNECT", "params": {} }],
+  "interval_sec": 60
+}
