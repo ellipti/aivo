@@ -8,25 +8,24 @@ Local run
 
 import os
 from datetime import datetime, time as dtime
-from typing import Any, Dict, Literal, Optional
+from pathlib import Path
+from typing import Any, Dict, Optional
 
-import httpx
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
+
 from .mt5_adapter import (
-  init_mt5,
-  resolve_symbol,
-  place_order,
-  close_order,
-  list_orders,
-  list_positions,
+    init_mt5,
+    place_order,
+    close_order,
+    list_orders,
+    list_positions,
 )
 
-
-MODE: Literal["oanda", "mt5"] = os.getenv("MODE", "oanda").lower()  # default: oanda
-OANDA_API_KEY = os.getenv("OANDA_API_KEY", "")
-OANDA_ACCOUNT_ID = os.getenv("OANDA_ACCOUNT_ID", "")
-OANDA_ENV = os.getenv("OANDA_ENV", "practice")  # or live
+# Load .env adjacent to this file
+load_dotenv(dotenv_path=Path(__file__).with_name(".env"))
+MODE = "mt5"
 
 
 app = FastAPI(title="AIVO Executor API")
@@ -169,54 +168,48 @@ async def oanda_positions() -> Dict[str, Any]:
 
 @app.get("/health")
 async def health():
-  if MODE == "mt5":
     info = init_mt5()  # best-effort init
-    return {"status": ("ok" if info.get("status") == "ok" else "degraded"), "mode": MODE, "terminal": info.get("terminal")}
-  return {"status": "ok", "mode": MODE}
+    return {
+        "status": ("ok" if info.get("status") == "ok" else "degraded"),
+        "mode": MODE,
+        "terminal": info.get("terminal"),
+    }
 
 
 @app.post("/orders/place")
 async def orders_place(body: PlaceOrderBody):
-  if MODE == "mt5":
     try:
-      init_mt5()
-      return place_order(body.model_dump(by_alias=True))
+        init_mt5()
+        return place_order(body.model_dump(by_alias=True))
     except Exception as e:
-      raise HTTPException(status_code=502, detail={"error": True, "reason": "broker_error", "message": str(e)})
-  return await oanda_place_order(body)
+        raise HTTPException(status_code=502, detail={"error": True, "reason": "broker_error", "message": str(e)})
 
 
 @app.get("/orders")
 async def orders_list():
-  if MODE == "mt5":
     try:
-      init_mt5()
-      return list_orders()
+        init_mt5()
+        return list_orders()
     except Exception as e:
-      raise HTTPException(status_code=502, detail={"error": True, "reason": "broker_error", "message": str(e)})
-  return await oanda_list_orders()
+        raise HTTPException(status_code=502, detail={"error": True, "reason": "broker_error", "message": str(e)})
 
 
 @app.post("/orders/close")
 async def orders_close(body: CloseOrderBody):
-  if MODE == "mt5":
     try:
-      init_mt5()
-      return close_order(body.orderId)
+        init_mt5()
+        return close_order(body.orderId)
     except Exception as e:
-      raise HTTPException(status_code=502, detail={"error": True, "reason": "broker_error", "message": str(e)})
-  return await oanda_cancel_order(body.orderId)
+        raise HTTPException(status_code=502, detail={"error": True, "reason": "broker_error", "message": str(e)})
 
 
 @app.get("/positions")
 async def positions():
-  if MODE == "mt5":
     try:
-      init_mt5()
-      return list_positions()
+        init_mt5()
+        return list_positions()
     except Exception as e:
-      raise HTTPException(status_code=502, detail={"error": True, "reason": "broker_error", "message": str(e)})
-  return await oanda_positions()
+        raise HTTPException(status_code=502, detail={"error": True, "reason": "broker_error", "message": str(e)})
 
 
 @app.post("/risk/position-size")
