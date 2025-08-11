@@ -1,0 +1,12 @@
+{
+  "timeframes": ["M30"],
+  "symbols": ["XAUUSD", "EURUSD", "US500", "DXY"],
+  "session_windows_utc": {
+    "LONDON": [7, 16],
+    "NY": [12, 21],
+    "ASIA": [23, 7]
+  },
+  "max_parallel": 1,
+  "cooldown_minutes_after_trade": 10,
+  "skip_if_blacklisted": true
+}

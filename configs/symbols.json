@@ -1,0 +1,16 @@
+{
+  "universe": {
+    "XAUUSD": { "enabled": true, "base_weight": 1.0 },
+    "EURUSD": { "enabled": true, "base_weight": 0.8 },
+    "US500": { "enabled": true, "base_weight": 0.6 },
+    "DXY": { "enabled": true, "base_weight": 0.4 }
+  },
+  "rotation": {
+    "rebalance_minutes": 60,
+    "lookback_bars": 200,
+    "min_volatility": 0.0008,
+    "max_correlation": 0.75,
+    "drawdown_blacklist_minutes": 120,
+    "loss_streak_to_blacklist": 3
+  }
+}
