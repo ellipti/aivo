@@ -1,0 +1,27 @@
+{
+  "strategies": [
+    {
+      "id": "PATTERN_V1",
+      "dimensions": {
+        "ema_len": [10, 100],
+        "rsi_level": [20, 80],
+        "atr_mult": [0.5, 3.0]
+      },
+      "n_calls": 30
+    },
+    {
+      "id": "BREAKOUT_V2",
+      "dimensions": {
+        "lookback": [10, 60],
+        "buffer_pts": [10, 100]
+      },
+      "n_calls": 25
+    }
+  ],
+  "acceptance": {
+    "min_pf_delta": 0.1,
+    "min_hit_delta_pct": 2.0
+  },
+  "forward_test_days": 5,
+  "cooldown_minutes": 180
+}
