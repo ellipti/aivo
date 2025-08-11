@@ -1,16 +1,35 @@
 from __future__ import annotations
 
+"""
+Local run
+
+  uvicorn services.analyzer.main:app --host 0.0.0.0 --port 7001 --reload
+
+Quick test
+
+  curl -s http://localhost:7001/health
+  curl -s -X POST http://localhost:7001/analyze \
+    -H "Content-Type: application/json" \
+    -d '{
+      "symbol":"XAUUSD", "timeframe":"H1",
+      "price_snapshot": 2400.12,
+      "technical": {"ema": 2398.5, "rsi": 52},
+      "fundamentals": {"events": ["NFP Friday"]},
+      "user_context": "trend-following"
+    }'
+"""
+
 import json
 import os
 import time
 import logging
 from collections import deque
-from datetime import datetime, timedelta, timezone
 from typing import List, Literal, Optional
 
-from fastapi import FastAPI, HTTPException
+import httpx
+from fastapi import FastAPI
 from pydantic import BaseModel, Field
-from openai import OpenAI
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 
 # ----------------------------------------------------------------------------
@@ -26,8 +45,6 @@ def getenv_float(name: str, default: float) -> float:
 
 MODEL = os.getenv("MODEL") or os.getenv("OPENAI_MODEL") or "gpt-5-thinking"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-TE_API_CLIENT = os.getenv("TE_API_CLIENT", "")
-TE_API_SECRET = os.getenv("TE_API_SECRET", "")
 TEMPERATURE = getenv_float("TEMPERATURE", 0.2)
 MAX_OUTPUT_TOKENS = int(os.getenv("RESPONSE_TOKENS", "800"))
 MIN_RR = getenv_float("MIN_RR", 1.5)
@@ -183,62 +200,55 @@ def apply_guardrails(d: ModelDecision) -> ModelDecision:
     return d
 
 
-def call_openai_with_retry(system_prompt: str, user_prompt: str, retries: int = 1) -> ModelDecision:
-    client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else OpenAI()
+def _extract_output_text(resp_json: dict) -> str:
+    # SDK provides output_text; REST may only have output list
+    if isinstance(resp_json.get("output_text"), str):
+        return resp_json["output_text"]
+    parts: List[str] = []
+    for item in resp_json.get("output", []) or []:
+        if item.get("type") == "message":
+            for c in item.get("content", []) or []:
+                t = c.get("text")
+                if isinstance(t, str):
+                    parts.append(t)
+    return "\n".join(parts)
 
-    last_error: Optional[Exception] = None
-    for attempt in range(retries + 1):
-        try:
-            resp = client.responses.create(
-                model=MODEL,
-                instructions=system_prompt,
-                input=user_prompt,
-                temperature=TEMPERATURE,
-                max_output_tokens=MAX_OUTPUT_TOKENS,
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": model_schema_for_openai(),
-                },
-            )
-            text = resp.output_text  # Already enforced to be JSON via schema
-            data = json.loads(text)
-            return ModelDecision.model_validate(data)
-        except Exception as e:  # Parse or API error
-            last_error = e
-            time.sleep(0.5)
-            continue
 
-    logger.error("openai_error", extra={"error": str(last_error)})
-    # Fallback minimal WAIT
-    return ModelDecision(
-        decision="WAIT",
-        entry=None,
-        stopLoss=None,
-        takeProfit=None,
-        confidence=0.0,
-        rationale="LLM error or schema mismatch",
-        risks=["LLM schema error"],
-        tags=["fallback"],
-    )
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(0.5))
+def call_openai_with_retry(system_prompt: str, user_prompt: str) -> ModelDecision:
+    if not OPENAI_API_KEY:
+        # No key: return WAIT stub so service remains usable locally
+        return ModelDecision(
+            decision="WAIT", entry=None, stopLoss=None, takeProfit=None,
+            confidence=0.0, rationale="OPENAI_API_KEY missing", risks=["no_key"], tags=["stub"]
+        )
+
+    url = "https://api.openai.com/v1/responses"
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": MODEL,
+        "instructions": system_prompt,
+        "input": user_prompt,
+        "temperature": TEMPERATURE,
+        "max_output_tokens": MAX_OUTPUT_TOKENS,
+        "response_format": {"type": "json_schema", "json_schema": model_schema_for_openai()},
+    }
+
+    with httpx.Client(timeout=30) as client:
+        r = client.post(url, headers=headers, json=payload)
+        r.raise_for_status()
+        data = r.json()
+    text = _extract_output_text(data)
+    parsed = json.loads(text)
+    return ModelDecision.model_validate(parsed)
 
 
 @app.get("/health")
 def health():
-    status = "ok"
-    openai_status = "ok"
-    try:
-        # Very small, cheap probe
-        probe = call_openai_with_retry(
-            system_prompt="Health check",
-            user_prompt="Respond with {\"decision\":\"WAIT\",\"confidence\":0.0,\"rationale\":\"health\",\"risks\":[\"none\"],\"tags\":[\"health\"]}",
-            retries=0,
-        )
-        if probe.decision != "WAIT":
-            openai_status = "degraded"
-    except Exception:
-        openai_status = "degraded"
-
-    return {"status": status, "openai": openai_status}
+    return {"status": "ok"}
 
 
 @app.post("/analyze", response_model=ModelDecision)
@@ -254,8 +264,17 @@ def analyze(body: AnalyzeInput) -> ModelDecision:
         },
     )
 
-    decision = call_openai_with_retry(system_prompt, user_prompt, retries=1)
+    decision = call_openai_with_retry(system_prompt, user_prompt)
     final = apply_guardrails(decision)
+    # Compute RR for logging
+    rr = None
+    try:
+        if final.entry is not None and final.stopLoss is not None and final.takeProfit is not None:
+            risk = abs(final.entry - final.stopLoss)
+            reward = abs(final.takeProfit - final.entry)
+            rr = (reward / risk) if risk > 0 else 0.0
+    except Exception:
+        rr = None
 
     RECENT_ANALYSES.append(
         {
@@ -267,7 +286,16 @@ def analyze(body: AnalyzeInput) -> ModelDecision:
         }
     )
 
-    logger.info("response_analyze", extra={"decision": final.decision, "tags": final.tags})
+    logger.info(
+        "response_analyze",
+        extra={
+            "symbol": body.symbol,
+            "tf": body.timeframe,
+            "decision": final.decision,
+            "rr": rr,
+            "confidence": final.confidence,
+        },
+    )
     return final
 
 
@@ -275,84 +303,4 @@ def analyze(body: AnalyzeInput) -> ModelDecision:
 def list_signals():
     """Return recent model analyses from in-memory ring buffer."""
     return {"items": list(RECENT_ANALYSES)}
-
-
-# ----------------------------------------------------------------------------
-# Economic Calendar (TradingEconomics)
-# ----------------------------------------------------------------------------
-
-
-class CalendarItem(BaseModel):
-    timeUTC: str
-    country: str
-    event: str
-    importance: Optional[str] = None
-    forecast: Optional[str] = None
-    previous: Optional[str] = None
-
-
-async def fetch_te_calendar(symbols: list[str], lookahead_hours: int) -> list[CalendarItem]:
-    import httpx
-
-    # TradingEconomics API reference: https://docs.tradingeconomics.com/
-    # Endpoint sample: https://api.tradingeconomics.com/calendar?d1=YYYY-MM-DD&d2=YYYY-MM-DD&importance=3&c=client:secret
-    now = datetime.now(timezone.utc)
-    d1 = now.strftime("%Y-%m-%d")
-    d2 = (now + timedelta(hours=lookahead_hours)).strftime("%Y-%m-%d")
-
-    # Map common FX symbols to countries; extend as needed
-    symbol_to_countries = {
-        "XAUUSD": ["United States"],
-        "EURUSD": ["Euro Area", "United States"],
-        "GBPUSD": ["United Kingdom", "United States"],
-        "USDJPY": ["Japan", "United States"],
-        "AUDUSD": ["Australia", "United States"],
-        "USDCAD": ["Canada", "United States"],
-        "USDCHF": ["Switzerland", "United States"],
-        "NZDUSD": ["New Zealand", "United States"],
-    }
-
-    countries: set[str] = set()
-    for s in symbols:
-        countries.update(symbol_to_countries.get(s.upper(), []))
-    c_param = ",".join(countries) if countries else "United States,Euro Area"
-
-    auth = f"{TE_API_CLIENT}:{TE_API_SECRET}" if TE_API_CLIENT and TE_API_SECRET else None
-    params = {
-        "d1": d1,
-        "d2": d2,
-        "importance": "3",  # high-impact
-    }
-    if auth:
-        params["c"] = auth
-
-    url = "https://api.tradingeconomics.com/calendar"
-    async with httpx.AsyncClient(timeout=10) as client:
-        r = await client.get(url, params=params)
-        r.raise_for_status()
-        data = r.json()
-
-    items: list[CalendarItem] = []
-    for it in data:
-        try:
-            items.append(
-                CalendarItem(
-                    timeUTC=(it.get("DateUTC") or it.get("Date", "")),
-                    country=it.get("Country", ""),
-                    event=it.get("Event", ""),
-                    importance=str(it.get("Importance", "")),
-                    forecast=(it.get("Forecast") or it.get("ForecastValue")),
-                    previous=(it.get("Previous") or it.get("PreviousValue")),
-                )
-            )
-        except Exception:
-            continue
-    return items
-
-
-@app.get("/calendar")
-async def calendar(symbols: str, lookaheadHours: int = 48):
-    symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
-    items = await fetch_te_calendar(symbol_list, lookaheadHours)
-    return {"symbols": symbol_list, "items": [it.model_dump() for it in items]}
 
