@@ -26,6 +26,8 @@ import os
 from datetime import datetime, time as dtime
 from pathlib import Path
 from typing import Any, Dict, Optional
+import json
+import redis
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header
@@ -53,6 +55,16 @@ MT5_SERVER = os.getenv("MT5_SERVER") if FORCE_LOGIN else None
 
 
 app = FastAPI(title="AIVO Executor API")
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+STREAM_KEY = os.getenv("AIVO_STREAM_KEY", "aivo_events")
+_redis = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+
+def publish_event(event_type: str, payload: Dict[str, Any]) -> None:
+  try:
+    _redis.xadd(STREAM_KEY, {"data": json.dumps({"type": event_type, **payload})}, maxlen=5000)
+  except Exception:
+    pass
 
 
 class PlaceOrderBody(BaseModel):
@@ -179,6 +191,19 @@ async def orders_place(body: PlaceOrderBody, Idempotency_Key: Optional[str] = He
             "retcode": data.get("retcode"),
             "ticket": data.get("order") or data.get("deal"),
             "latency_ms": latency_ms,
+        })
+        # publish order event to stream
+        publish_event("order", {
+          "t": datetime.utcnow().isoformat() + "Z",
+          "symbol": payload.get("symbol") or payload.get("instrument"),
+          "side": payload.get("side"),
+          "units": payload.get("units"),
+          "price": payload.get("limitPrice") or payload.get("entry"),
+          "sl": payload.get("sl"),
+          "tp": payload.get("tp"),
+          "retcode": data.get("retcode"),
+          "ticket": data.get("order") or data.get("deal"),
+          "latency_ms": latency_ms,
         })
     except Exception:
         pass

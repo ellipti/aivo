@@ -1,17 +1,19 @@
+import dynamic from 'next/dynamic';
+
+const LiveFeedClient = dynamic(() => import('../../components/LiveFeed').then((m) => m.LiveFeed), {
+  ssr: false,
+});
+const KpiCards = dynamic(() => import('../../components/KpiCards'), { ssr: false });
+const EquityChart = dynamic(() => import('../../components/EquityChart'), { ssr: false });
+const DailyPnL = dynamic(() => import('../../components/DailyPnL'), { ssr: false });
+
 export default function DashboardPage() {
   return (
     <main className="container mx-auto px-4 py-10 space-y-8">
       <h1 className="text-2xl font-semibold">Dashboard</h1>
       <section>
         <h2 className="font-medium mb-2">KPIs</h2>
-        <div className="grid md:grid-cols-4 gap-4">
-          {['PnL', 'Win Rate', 'Sharpe', 'Open Trades'].map((k) => (
-            <div key={k} className="rounded-lg border p-4">
-              <div className="text-sm text-muted-foreground">{k}</div>
-              <div className="text-2xl font-bold">--</div>
-            </div>
-          ))}
-        </div>
+        <KpiClient />
       </section>
       <section>
         <h2 className="font-medium mb-2">Orders</h2>
@@ -20,6 +22,8 @@ export default function DashboardPage() {
       <section>
         <h2 className="font-medium mb-2">Signals</h2>
         <SignalsList />
+        {/* SSE from Analyzer; consider env/proxy in production */}
+        <ClientLiveFeed />
         <div className="pt-4">
           <a
             href="/analyze"
@@ -74,6 +78,22 @@ async function OrdersTable() {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function ClientLiveFeed() {
+  return <LiveFeedClient url="http://localhost:7001/events/stream" />;
+}
+
+function KpiClient() {
+  return (
+    <div className="space-y-4">
+      <KpiCards />
+      <div className="grid md:grid-cols-2 gap-4">
+        <EquityChart />
+        <DailyPnL />
+      </div>
     </div>
   );
 }

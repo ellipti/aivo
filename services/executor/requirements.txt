@@ -6,4 +6,5 @@ tzdata
 MetaTrader5>=5.0.45
 sqlmodel>=0.0.16
 sqlalchemy>=2.0
+redis>=5
 

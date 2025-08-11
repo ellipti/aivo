@@ -28,9 +28,11 @@ from typing import List, Literal, Optional
 
 import httpx
 from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from tenacity import retry, stop_after_attempt, wait_fixed
 from .utils.decision_validator import Decision as VDecision, parse_gpt, validate, DecisionError
+from .utils.event_bus import publish_event
 
 
 # ----------------------------------------------------------------------------
@@ -333,6 +335,23 @@ def analyze(body: AnalyzeInput) -> ModelDecision:
             "confidence": final.confidence,
         },
     )
+    # Publish to event bus (signals)
+    try:
+        publish_event(
+            "signal",
+            {
+                "symbol": body.symbol,
+                "timeframe": body.timeframe,
+                "decision": final.decision,
+                "entry": final.entry,
+                "sl": final.stopLoss,
+                "tp": final.takeProfit,
+                "confidence": final.confidence,
+                "rr": rr,
+            },
+        )
+    except Exception:
+        pass
     return final
 
 
@@ -340,4 +359,30 @@ def analyze(body: AnalyzeInput) -> ModelDecision:
 def list_signals():
     """Return recent model analyses from in-memory ring buffer."""
     return {"items": list(RECENT_ANALYSES)}
+
+
+# ----------------- SSE stream (simple) -----------------
+
+STREAM_KEY = os.getenv("AIVO_STREAM_KEY", "aivo_events")
+import redis
+_redis = redis.Redis(host=os.getenv("REDIS_HOST", "localhost"), port=int(os.getenv("REDIS_PORT", "6379")), decode_responses=True)
+
+def _iter_stream():
+    last_id = "$"
+    while True:
+        try:
+            resp = _redis.xread({STREAM_KEY: last_id}, block=5000, count=10)
+            if resp:
+                _, messages = resp[0]
+                for msg_id, fields in messages:
+                    last_id = msg_id
+                    data = fields.get("data")
+                    if data:
+                        yield f"data: {data}\n\n"
+        except Exception:
+            yield "event: ping\n\n"
+
+@app.get("/events/stream")
+def stream_events():
+    return StreamingResponse(_iter_stream(), media_type="text/event-stream")
 

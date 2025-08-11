@@ -1,0 +1,12 @@
+{
+  "csv_path": "data/XAUUSD_M30.csv",
+  "guardrails_path": "configs/guardrails.json",
+  "train": [1500, 2000, 2500],
+  "test": [250, 500],
+  "rr": [1.5, 2.0, 2.5],
+  "min_stop_pts": [5, 10, 15],
+  "max_concurrent": 1,
+  "out_csv": "sweep_results.csv",
+  "out_html": "sweep_report.html",
+  "parallel_workers": 6
+}

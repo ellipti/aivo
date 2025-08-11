@@ -1,0 +1,35 @@
+{
+  "risk": {
+    "base_risk_pct": 1.0,
+    "min_stop_pts": 10.0,
+    "max_stop_pts": 200.0
+  },
+  "regimes": {
+    "atr_period": 14,
+    "low_threshold": 0.003,
+    "high_threshold": 0.012,
+    "risk_multipliers": { "LOW": 0.6, "NORMAL": 1.0, "HIGH": 0.5 },
+    "min_score_by_regime": { "LOW": 55, "NORMAL": 60, "HIGH": 65 }
+  },
+  "session": {
+    "london_hours_utc": [7, 16],
+    "ny_hours_utc": [12, 21],
+    "asia_hours_utc": [23, 7],
+    "risk_boost": { "LONDON": 1.1, "NY": 1.1, "ASIA": 0.8, "OTHER": 0.95 }
+  },
+  "news": {
+    "blackout_minutes_before": 30,
+    "blackout_minutes_after": 30,
+    "apply_to": ["XAUUSD", "EURUSD", "US500"],
+    "impact_levels": ["High"]
+  },
+  "symbol": {
+    "XAUUSD": {
+      "contract_size": 100.0,
+      "point": 0.1,
+      "point_value": 1.0,
+      "min_lot": 0.01,
+      "lot_step": 0.01
+    }
+  }
+}
