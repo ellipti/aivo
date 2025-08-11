@@ -1,0 +1,5 @@
+{
+  "weekly_days": 7,
+  "export_dir": "exports/",
+  "csv_filename": "trades_export.csv"
+}

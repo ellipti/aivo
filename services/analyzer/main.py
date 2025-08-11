@@ -98,6 +98,7 @@ from . import incidents_api
 from . import news_api
 from . import intermarket_api
 from . import routing_api
+from . import journal_api
 from . import ensemble_api
 app.include_router(metrics.router)
 app.include_router(tuner_api.router)
@@ -118,6 +119,7 @@ app.include_router(incidents_api.router)
 app.include_router(news_api.router)
 app.include_router(intermarket_api.router)
 app.include_router(routing_api.router)
+app.include_router(journal_api.router)
 app.include_router(ensemble_api.router)
 
 
