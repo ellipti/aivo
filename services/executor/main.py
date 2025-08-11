@@ -16,12 +16,16 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Header
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import Literal
 
 from . import mt5_adapter
+from time import perf_counter
+from collections import deque
+import hashlib
+from typing import Deque, Tuple
 
 # Load .env adjacent to this file
 load_dotenv(dotenv_path=Path(__file__).with_name(".env"))
@@ -41,10 +45,12 @@ class PlaceOrderBody(BaseModel):
   symbol: str = Field(alias="instrument")
   side: Literal["BUY", "SELL"]
   units: int
-  entryType: Literal["market", "limit"] = "market"
+  entryType: Literal["market", "limit", "stop"] = "market"
   limitPrice: Optional[float] = None
+  entry: Optional[float] = None
   sl: Optional[float] = None
   tp: Optional[float] = None
+  deviation: Optional[int] = 10
 
 
 class CloseOrderBody(BaseModel):
@@ -92,11 +98,51 @@ async def health():
 
 
 @app.post("/orders/place")
-async def orders_place(body: PlaceOrderBody):
+async def orders_place(body: PlaceOrderBody, Idempotency_Key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
     state = init_state()
     if not state.get("authorized"):
         return unauthorized_response()
-    data = mt5_adapter.place_order(body.model_dump(by_alias=True))
+    # Idempotency (10 min)
+    now_ms = int(datetime.now().timestamp() * 1000)
+    window_ms = 10 * 60 * 1000
+    if not hasattr(orders_place, "_idem_cache"):
+        setattr(orders_place, "_idem_cache", {})
+    cache: Dict[str, Tuple[int, Dict[str, Any]]] = getattr(orders_place, "_idem_cache")  # type: ignore
+    # purge old
+    for k in list(cache.keys()):
+        if now_ms - cache[k][0] > window_ms:
+            del cache[k]
+    payload = body.model_dump(by_alias=True)
+    key = None
+    if Idempotency_Key:
+        m = hashlib.sha256()
+        m.update(Idempotency_Key.encode("utf-8"))
+        m.update(str(payload).encode("utf-8"))
+        key = m.hexdigest()
+        if key in cache:
+            return JSONResponse(cache[key][1])
+
+    t0 = perf_counter()
+    data = mt5_adapter.place_order(payload)
+    latency_ms = int((perf_counter() - t0) * 1000)
+    # structured log
+    try:
+        print({
+            "t": datetime.utcnow().isoformat() + "Z",
+            "symbol": payload.get("symbol") or payload.get("instrument"),
+            "side": payload.get("side"),
+            "lots": payload.get("units"),
+            "price": payload.get("limitPrice") or payload.get("entry"),
+            "sl": payload.get("sl"),
+            "tp": payload.get("tp"),
+            "retcode": data.get("retcode"),
+            "ticket": data.get("order") or data.get("deal"),
+            "latency_ms": latency_ms,
+        })
+    except Exception:
+        pass
+    if key:
+        cache[key] = (now_ms, data)
     return JSONResponse(data)
 
 
@@ -114,7 +160,26 @@ async def orders_close(body: CloseOrderBody):
     state = init_state()
     if not state.get("authorized"):
         return unauthorized_response()
-    data = mt5_adapter.close_order(body.orderId)
+    # optional partial close via volumePct
+    volume_pct: Optional[float] = None
+    try:
+        # if JSON contains it, pydantic won't parse here (not in model) so extract manually is simpler
+        volume_pct = None
+    except Exception:
+        volume_pct = None
+    data = mt5_adapter.close_order(body.orderId, volume_pct=volume_pct)
+    return JSONResponse(data)
+
+
+@app.post("/orders/modify")
+async def orders_modify(body: Dict[str, Any]):
+    state = init_state()
+    if not state.get("authorized"):
+        return unauthorized_response()
+    order_id = str(body.get("orderId"))
+    sl = body.get("sl")
+    tp = body.get("tp")
+    data = mt5_adapter.modify_order(order_id, sl=sl, tp=tp)
     return JSONResponse(data)
 
 
@@ -124,6 +189,15 @@ async def positions():
     if not state.get("authorized"):
         return unauthorized_response()
     data = mt5_adapter.list_positions()
+    return JSONResponse(data)
+
+
+@app.get("/broker/symbols")
+async def broker_symbols():
+    state = init_state()
+    if not state.get("authorized"):
+        return unauthorized_response()
+    data = mt5_adapter.list_symbols()
     return JSONResponse(data)
 
 
@@ -154,4 +228,20 @@ async def schedule_allowed_now():
   window = (dtime(s_hour, s_min), dtime(e_hour, e_min))
   allowed = window[0] <= now_t <= window[1]
   return JSONResponse({"allowed": allowed, "now": now.isoformat(), "window": {"start": start, "end": end, "tz": tzname}})
+
+
+# --- Metrics (very small surface; extend as needed) ---
+_metrics = {
+    "aivo_orders_total": {"BUY": 0, "SELL": 0},
+}
+
+
+@app.get("/metrics")
+async def metrics():
+  lines = []
+  lines.append("# HELP aivo_orders_total Total orders placed by side")
+  lines.append("# TYPE aivo_orders_total counter")
+  for side, val in _metrics["aivo_orders_total"].items():
+    lines.append(f'aivo_orders_total{{side="{side}"}} {val}')
+  return JSONResponse("\n".join(lines))
 
