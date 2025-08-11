@@ -1,0 +1,11 @@
+{
+  "pretrade": { "snapshots": 6, "snapshot_interval_ms": 70, "max_spread_points": 22 },
+  "limit": {
+    "wait_fill_ms": 3000,
+    "replace_retries": 4,
+    "offset_points_cap": 18,
+    "volatility_k": 0.7
+  },
+  "iceberg": { "enabled": true, "chunks": 4, "chunk_pause_ms": 300 },
+  "fallback": { "allow_market_if_spread_high": true, "max_market_slippage_points": 18 }
+}

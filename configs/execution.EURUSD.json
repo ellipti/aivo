@@ -1,0 +1,5 @@
+{
+  "pretrade": { "max_spread_points": 8 },
+  "iceberg": { "enabled": false },
+  "fallback": { "allow_market_if_spread_high": true, "max_market_slippage_points": 6 }
+}
