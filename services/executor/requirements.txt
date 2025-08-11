@@ -1,0 +1,6 @@
+fastapi==0.112.0
+uvicorn==0.30.5
+oandapyV20==0.7.2
+pydantic==2.8.2
+python-dotenv==1.0.1
+

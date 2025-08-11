@@ -1,0 +1,19 @@
+version: '3.9'
+services:
+  analyzer:
+    build:
+      context: ./services/analyzer
+      dockerfile: Dockerfile
+    env_file:
+      - ./services/analyzer/.env.example
+    ports:
+      - '8001:8000'
+  executor:
+    build:
+      context: ./services/executor
+      dockerfile: Dockerfile
+    env_file:
+      - ./services/executor/.env.example
+    ports:
+      - '8002:8000'
+

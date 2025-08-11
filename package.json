@@ -1,0 +1,35 @@
+{
+  "name": "aivo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AIVO monorepo (apps, services, packages)",
+  "packageManager": "pnpm@9.6.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=18.18.0",
+    "pnpm": ">=9"
+  },
+  "scripts": {
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "test": "turbo test",
+    "dev": "turbo dev",
+    "format": "prettier --write .",
+    "prepare": "husky install"
+  },
+  "devDependencies": {
+    "@turbo/gen": "^2.0.0",
+    "@types/node": "^20.12.12",
+    "eslint": "^9.6.0",
+    "eslint-config-prettier": "^9.1.0",
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.7",
+    "prettier": "^3.3.3",
+    "turbo": "^2.0.0",
+    "typescript": "^5.5.4"
+  }
+}
+
