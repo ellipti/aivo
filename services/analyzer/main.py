@@ -91,6 +91,9 @@ from . import playbook_api
 from . import copilot_api
 from . import swarm_api
 from . import strategy_api
+from . import exposure_api
+from . import exposure_sse
+from . import corr_api
 from . import ensemble_api
 app.include_router(metrics.router)
 app.include_router(tuner_api.router)
@@ -104,6 +107,9 @@ app.include_router(playbook_api.router)
 app.include_router(copilot_api.router)
 app.include_router(swarm_api.router)
 app.include_router(strategy_api.router)
+app.include_router(exposure_api.router)
+app.include_router(exposure_sse.router)
+app.include_router(corr_api.router)
 app.include_router(ensemble_api.router)
 
 

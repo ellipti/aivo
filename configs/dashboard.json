@@ -1,0 +1,13 @@
+{
+  "risk_caps": {
+    "portfolio_pct": 2.0,
+    "per_trade_pct": 1.2
+  },
+  "heatmap": {
+    "rows": ["XAUUSD", "EURUSD", "US500", "DXY"],
+    "cols": ["PATTERN_V1", "BREAKOUT_V2", "MEANREV_V1"],
+    "warn_pct": 0.7,
+    "alert_pct": 0.9
+  },
+  "sse": { "enabled": true, "min_push_ms": 1000 }
+}
